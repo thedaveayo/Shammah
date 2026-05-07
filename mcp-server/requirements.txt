@@ -1,0 +1,16 @@
+# Security MCP Server Requirements
+
+# MCP SDK
+mcp==1.0.0
+
+# Database
+sqlalchemy==2.0.25
+
+# HTTP Client
+requests==2.31.0
+
+# Environment
+python-dotenv==1.0.0
+
+# Infrastructure Detection
+# (uses standard library: json, re, os, pathlib)

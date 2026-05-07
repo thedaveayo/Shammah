@@ -1,0 +1,29 @@
+# Security MCP Backend Requirements
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# Database
+sqlalchemy==2.0.25
+
+# API Validation
+pydantic==2.5.3
+
+# HTTP Client
+requests==2.31.0
+
+# LLM (Qwen - OpenAI compatible)
+openai==1.10.0
+
+# Authentication
+pyjwt==2.8.0
+
+# Scheduling
+schedule==1.2.0
+
+# Environment
+python-dotenv==1.0.0
+
+# XML Parsing (for CWE)
+lxml==5.1.0

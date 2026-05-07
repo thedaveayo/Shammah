@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Security MCP Rule Schema",
+  "description": "Unified schema for all security rules (CVE, CWE, DSV)",
+  "type": "object",
+  "required": [
+    "rule_id",
+    "rule_type",
+    "source",
+    "severity",
+    "title",
+    "description",
+    "enforcement",
+    "metadata"
+  ],
+  "properties": {
+    "rule_id": {
+      "type": "string",
+      "pattern": "^DSV-\\d{4}-\\d{4}$",
+      "description": "Internal rule ID (Dave Sourced Vulnerability)"
+    },
+    "rule_type": {
+      "type": "string",
+      "enum": ["cve", "cwe", "dsv"],
+      "description": "Rule type: CVE (version vulnerability), CWE (weakness pattern), DSV (Dave-sourced)"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["nvd", "mitre", "misp", "cwe", "telegram"],
+      "description": "Original source of the rule"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low"],
+      "description": "Severity level"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Full description of the vulnerability or weakness"
+    },
+    "cve_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^CVE-\\d{4}-\\d{4,}$"
+      },
+      "description": "References to original CVE IDs (for CVE-type rules)"
+    },
+    "cwe_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^CWE-\\d+$"
+      },
+      "description": "References to CWE IDs (for weakness patterns)"
+    },
+    "affected_package": {
+      "type": "string",
+      "description": "Package name affected (for CVE-type rules)"
+    },
+    "affected_versions": {
+      "type": "string",
+      "description": "Version range affected (for CVE-type rules, e.g., '>=5.6.0,<5.6.2')"
+    },
+    "pattern": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["regex", "ast", "file_exists"]
+        },
+        "value": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        }
+      },
+      "required": ["type", "value"],
+      "description": "Code pattern to match (for CWE/DSV-type rules)"
+    },
+    "applies_to": {
+      "type": "object",
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "frameworks": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "contexts": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "description": "Languages, frameworks, and contexts this rule applies to"
+    },
+    "source_link": {
+      "type": "string",
+      "format": "uri",
+      "description": "Source URL (Telegram link for DSV, NVD/MITRE for CVE/CWE)"
+    },
+    "enforcement": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["block", "warn"]
+        },
+        "message": {
+          "type": "string",
+          "description": "What the user sees when violated (lay terms)"
+        },
+        "required_actions": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "required": ["level", "message", "required_actions"]
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Rule expiry (30 days from sync for subscription enforcement)"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "external_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "required": ["created_at", "updated_at"]
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "name": "security-mcp",
+  "displayName": "Security MCP",
+  "description": "Security enforcement for code as you type",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "security-mcp.scanCurrentFile",
+        "title": "Security MCP: Scan Current File"
+      },
+      {
+        "command": "security-mcp.showSecurityDashboard",
+        "title": "Security MCP: Show Security Dashboard"
+      },
+      {
+        "command": "security-mcp.applyQuickFix",
+        "title": "Security MCP: Apply Quick Fix"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "security-mcp.scanCurrentFile",
+          "group": "security-mcp"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Security MCP",
+      "properties": {
+        "security-mcp.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "URL of the Security MCP backend server"
+        },
+        "security-mcp.apiToken": {
+          "type": "string",
+          "default": "",
+          "description": "API token for authenticating with the Security MCP backend"
+        },
+        "security-mcp.enableRealtimeScanning": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable real-time scanning of code as you type"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/vscode": "^1.74.0",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}

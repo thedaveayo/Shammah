@@ -1,0 +1,42 @@
+<idea-plugin>
+  <id>com.securitymcp.plugin</id>
+  <name>Security MCP</name>
+  <version>0.0.1</version>
+  <vendor email="support@securitymcp.com" url="https://securitymcp.com">Security MCP</vendor>
+
+  <description><![CDATA[
+  Security enforcement for code as you type.
+  Integrates with the Security MCP backend to scan your code for vulnerabilities in real-time.
+  ]]></description>
+
+  <change-notes><![CDATA[
+  Initial release with basic functionality.
+  ]]>
+  </change-notes>
+
+  <!-- please see https://plugins.jetbrains.com/docs/intellij/build-number-ranges.html for description -->
+  <idea-version since-build="201"/>
+
+  <!-- please see https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html
+       on how to target different products -->
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <!-- Add your extensions here -->
+    <toolWindow factoryClass="com.securitymcp.plugin.ui.SecurityDashboardToolWindowFactory" id="Security Dashboard"/>
+    <annotator language="any" implementationClass="com.securitymcp.plugin.annotator.SecurityAnnotator"/>
+  </extensions>
+
+  <actions>
+    <action id="SecurityMCP.ScanCurrentFileAction" class="com.securitymcp.plugin.actions.ScanCurrentFileAction"
+            text="Scan Current File" description="Scan the current file for security vulnerabilities">
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+      <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift S"/>
+    </action>
+    <action id="SecurityMCP.ApplyQuickFixAction" class="com.securitymcp.plugin.actions.ApplyQuickFixAction"
+            text="Apply Security Quick Fix" description="Apply a quick fix for security issues">
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+    </action>
+  </actions>
+
+</idea-plugin>
