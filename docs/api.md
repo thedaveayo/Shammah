@@ -39,6 +39,31 @@ All rules as a flat JSON object keyed by rule ID.
 }
 ```
 
+### `POST /api/sync`
+Rules for the MCP server's local cache. Only rules with a code pattern are returned.
+
+Request (both fields optional):
+```json
+{ "last_sync": "2026-11-01T00:00:00", "stack": {} }
+```
+With `last_sync`, only rules created or changed since then are returned. An invalid timestamp returns `400`.
+
+Response:
+```json
+{
+  "new_rules": [{
+    "rule_id": "DSV-2026-0100", "rule_type": "dsv", "source": "telegram", "severity": "high",
+    "title": "Auth token stored in localStorage", "description": "...",
+    "cve_refs": [], "cwe_refs": ["CWE-922"], "affected_package": null, "affected_versions": null,
+    "pattern": { "type": "regex", "value": "localStorage\\.setItem\\(...", "language": "javascript" },
+    "applies_to": { "languages": ["javascript"] }, "source_link": null,
+    "enforcement": { "level": "block", "message": "...", "required_actions": ["..."] }
+  }],
+  "total": 1,
+  "synced_at": "2026-11-17T18:00:00"
+}
+```
+
 ## Admin routes
 
 ### `POST /api/fetch/cwe`

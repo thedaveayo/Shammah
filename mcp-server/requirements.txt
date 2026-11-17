@@ -1,7 +1,7 @@
 # Shammah MCP Server Requirements
 
 # MCP SDK
-mcp>=1.0.0
+mcp>=2.0,<3
 
 # Database
 sqlalchemy>=2.0.30,<3

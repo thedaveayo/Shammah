@@ -71,8 +71,8 @@ class SecurityMCPClient(private val project: Project) {
     }
 
     private fun getBackendUrl(): String {
-        // Get from project settings, fallback to default
-        return "http://localhost:8000" // TODO: Get from settings
+        // Local Shammah bridge: run `python main.py --bridge` in mcp-server/
+        return System.getenv("SHAMMAH_BRIDGE_URL") ?: "http://127.0.0.1:8765"
     }
 
     private fun getApiToken(): String {

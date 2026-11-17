@@ -1,241 +1,236 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
 
+/**
+ * Shammah for VS Code.
+ *
+ * Talks to the local Shammah bridge (`python main.py --bridge` in mcp-server/),
+ * which runs the same checks coding agents get through MCP.
+ */
+
+interface Violation {
+	rule_id: string;
+	title: string;
+	severity: 'critical' | 'high' | 'medium' | 'low';
+	message: string;
+	required_actions: string[];
+	references: string[];
+	line: number;
+	column: number;
+	end_line: number;
+	end_column: number;
+}
+
+interface ToolResponse {
+	result: string;
+	violations?: Violation[];
+	counts?: Record<string, number>;
+	blocked?: boolean;
+	error?: string;
+	[key: string]: unknown;
+}
+
 let diagnosticCollection: vscode.DiagnosticCollection;
+let output: vscode.OutputChannel;
+let warnedUnreachable = false;
+const pendingScans = new Map<string, NodeJS.Timeout>();
 
-export async function activate(context: vscode.ExtensionContext) {
-	console.log('Security MCP extension activated');
+export function activate(context: vscode.ExtensionContext) {
+	diagnosticCollection = vscode.languages.createDiagnosticCollection('shammah');
+	output = vscode.window.createOutputChannel('Shammah');
+	context.subscriptions.push(diagnosticCollection, output);
 
-	// Initialize diagnostics collection
-	diagnosticCollection = vscode.languages.createDiagnosticCollection('security-mcp');
-	context.subscriptions.push(diagnosticCollection);
-
-	// Register commands
-	const scanCurrentFileCommand = vscode.commands.registerCommand('security-mcp.scanCurrentFile', async () => {
-		await scanCurrentFile();
-	});
-
-	const showSecurityDashboardCommand = vscode.commands.registerCommand('security-mcp.showSecurityDashboard', () => {
-		showSecurityDashboard();
-	});
-
-	const applyQuickFixCommand = vscode.commands.registerCommand('security-mcp.applyQuickFix', async () => {
-		await applyQuickFix();
-	});
-
-	context.subscriptions.push(scanCurrentFileCommand, showSecurityDashboardCommand, applyQuickFixCommand);
-
-	// Setup real-time scanning if enabled
-	if (vscode.workspace.getConfiguration('security-mcp').get('enableRealtimeScanning')) {
-		setupRealtimeScanning(context);
-	}
-}
-
-export function deactivate() {}
-
-/**
- * Scans the currently opened file for security vulnerabilities
- */
-async function scanCurrentFile() {
-	const editor = vscode.window.activeTextEditor;
-	if (!editor) {
-		vscode.window.showErrorMessage('No active editor found');
-		return;
-	}
-
-	const document = editor.document;
-	const filePath = document.fileName;
-	const code = document.getText();
-
-	try {
-		// Get configuration
-		const config = vscode.workspace.getConfiguration('security-mcp');
-		const backendUrl = config.get<string>('backendUrl') || 'http://localhost:8000';
-		const apiToken = config.get<string>('apiToken') || '';
-
-		// Call the MCP server's security scan tool
-		const response = await axios.post(`${backendUrl}/api/tools/call`, {
-			name: "security_scan_file",
-			arguments: {
-				file_path: filePath,
-				include_details: true
-			}
-		}, {
-			headers: {
-				'Authorization': `Bearer ${apiToken}`,
-				'Content-Type': 'application/json'
-			}
-		});
-
-		// Process the response
-		const result = response.data;
-		if (result && result.result) {
-			vscode.window.showInformationMessage(`Security scan completed: ${result.result}`);
-			
-			// Update diagnostics
-			updateDiagnostics(document, result.violations || []);
-		} else {
-			vscode.window.showWarningMessage('No security issues found or invalid response from server');
-		}
-	} catch (error) {
-		console.error('Error scanning file:', error);
-		vscode.window.showErrorMessage(`Error scanning file: ${error instanceof Error ? error.message : 'Unknown error'}`);
-	}
-}
-
-/**
- * Shows the security dashboard
- */
-function showSecurityDashboard() {
-	// Create and show a webview panel for the security dashboard
-	const panel = vscode.window.createWebviewPanel(
-		'securityDashboard',
-		'Security Dashboard',
-		vscode.ViewColumn.One,
-		{
-			enableScripts: true,
-			retainContextWhenHidden: true
-		}
+	context.subscriptions.push(
+		vscode.commands.registerCommand('security-mcp.scanCurrentFile', () => scanActiveEditor(true)),
+		vscode.commands.registerCommand('security-mcp.showSecurityDashboard', () => showSecurityDashboard()),
+		vscode.commands.registerCommand('security-mcp.applyQuickFix', () => showFixSuggestions()),
+		vscode.workspace.onDidChangeTextDocument(event => scheduleScan(event.document)),
+		vscode.workspace.onDidOpenTextDocument(document => scheduleScan(document)),
+		vscode.workspace.onDidSaveTextDocument(document => scheduleScan(document)),
+		vscode.workspace.onDidCloseTextDocument(document => diagnosticCollection.delete(document.uri)),
 	);
 
-	panel.webview.html = getDashboardHtml();
+	if (vscode.window.activeTextEditor) {
+		scheduleScan(vscode.window.activeTextEditor.document);
+	}
 }
 
-/**
- * Applies a quick fix for security issues
- */
-async function applyQuickFix() {
+export function deactivate() {
+	for (const timer of pendingScans.values()) {
+		clearTimeout(timer);
+	}
+	pendingScans.clear();
+}
+
+function config() {
+	return vscode.workspace.getConfiguration('security-mcp');
+}
+
+function serverUrl(): string {
+	return (config().get<string>('serverUrl') || 'http://127.0.0.1:8765').replace(/\/+$/, '');
+}
+
+async function callTool(name: string, args: Record<string, unknown>): Promise<ToolResponse> {
+	try {
+		const response = await axios.post<ToolResponse>(`${serverUrl()}/api/tools/call`, { name, arguments: args }, {
+			headers: { 'Content-Type': 'application/json' },
+			timeout: 30000,
+		});
+		warnedUnreachable = false;
+		return response.data;
+	} catch (error) {
+		if (axios.isAxiosError(error) && error.response?.data?.error) {
+			throw new Error(error.response.data.error);
+		}
+		if (!warnedUnreachable) {
+			warnedUnreachable = true;
+			vscode.window.showWarningMessage(
+				`Shammah: can't reach ${serverUrl()}. Start it with "python main.py --bridge" in the mcp-server folder.`);
+		}
+		throw error;
+	}
+}
+
+function scheduleScan(document: vscode.TextDocument) {
+	if (!config().get<boolean>('enableRealtimeScanning', true) || document.uri.scheme !== 'file') {
+		return;
+	}
+	const key = document.uri.toString();
+	const existing = pendingScans.get(key);
+	if (existing) {
+		clearTimeout(existing);
+	}
+	pendingScans.set(key, setTimeout(() => {
+		pendingScans.delete(key);
+		scanDocument(document).catch(() => undefined);
+	}, 1000));
+}
+
+async function scanActiveEditor(announce: boolean) {
 	const editor = vscode.window.activeTextEditor;
 	if (!editor) {
 		vscode.window.showErrorMessage('No active editor found');
 		return;
 	}
-
-	const document = editor.document;
-	const code = document.getText();
-
 	try {
-		// Get configuration
-		const config = vscode.workspace.getConfiguration('security-mcp');
-		const backendUrl = config.get<string>('backendUrl') || 'http://localhost:8000';
-		const apiToken = config.get<string>('apiToken') || '';
-
-		// Call the MCP server's security fix suggestions tool
-		const response = await axios.post(`${backendUrl}/api/tools/call`, {
-			name: "security_fix_suggestions",
-			arguments: {
-				code: code,
-				language: document.languageId
-			}
-		}, {
-			headers: {
-				'Authorization': `Bearer ${apiToken}`,
-				'Content-Type': 'application/json'
-			}
-		});
-
-		// Process the response
-		const result = response.data;
-		if (result && result.fixes) {
-			// Implement fix application logic here
-			vscode.window.showInformationMessage('Quick fixes applied successfully');
-		} else {
-			vscode.window.showWarningMessage('No fixes available for the current code');
+		const result = await scanDocument(editor.document);
+		if (announce) {
+			const count = result.violations?.length ?? 0;
+			vscode.window.showInformationMessage(count === 0
+				? 'Shammah: no security issues found.'
+				: `Shammah: ${count} security issue(s) found. See the Problems panel.`);
 		}
 	} catch (error) {
-		console.error('Error applying quick fix:', error);
-		vscode.window.showErrorMessage(`Error applying quick fix: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		vscode.window.showErrorMessage(`Shammah: scan failed: ${error instanceof Error ? error.message : String(error)}`);
 	}
 }
 
-/**
- * Sets up real-time scanning as the user types
- */
-function setupRealtimeScanning(context: vscode.ExtensionContext) {
-	const disposable = vscode.workspace.onDidChangeTextDocument(event => {
-		// Debounce the scanning to avoid too frequent calls
-		setTimeout(async () => {
-			if (event.document === vscode.window.activeTextEditor?.document) {
-				await scanCurrentFile();
-			}
-		}, 1000); // Wait 1 second after the last change
+async function scanDocument(document: vscode.TextDocument): Promise<ToolResponse> {
+	const result = await callTool('enforce_security', {
+		code: document.getText(),
+		language: document.languageId,
+	});
+	diagnosticCollection.set(document.uri, toDiagnostics(document, result.violations ?? []));
+	return result;
+}
+
+function toDiagnostics(document: vscode.TextDocument, violations: Violation[]): vscode.Diagnostic[] {
+	return violations.map(v => {
+		const start = document.validatePosition(new vscode.Position(Math.max(v.line - 1, 0), Math.max(v.column - 1, 0)));
+		const end = document.validatePosition(new vscode.Position(Math.max(v.end_line - 1, 0), Math.max(v.end_column - 1, 0)));
+		const range = start.isEqual(end) ? document.lineAt(start.line).range : new vscode.Range(start, end);
+		const fix = v.required_actions?.length ? ` Fix: ${v.required_actions.join('; ')}` : '';
+		const diagnostic = new vscode.Diagnostic(range, `${v.title}: ${v.message}${fix}`, severityOf(v.severity));
+		diagnostic.code = v.rule_id;
+		diagnostic.source = 'Shammah';
+		return diagnostic;
+	});
+}
+
+function severityOf(severity: Violation['severity']): vscode.DiagnosticSeverity {
+	switch (severity) {
+		case 'critical':
+		case 'high':
+			return vscode.DiagnosticSeverity.Error;
+		case 'medium':
+			return vscode.DiagnosticSeverity.Warning;
+		default:
+			return vscode.DiagnosticSeverity.Information;
+	}
+}
+
+async function showFixSuggestions() {
+	const editor = vscode.window.activeTextEditor;
+	if (!editor) {
+		vscode.window.showErrorMessage('No active editor found');
+		return;
+	}
+	try {
+		const result = await callTool('security_fix_suggestions', {
+			code: editor.document.getText(),
+			language: editor.document.languageId,
+		});
+		output.clear();
+		output.appendLine(result.result);
+		output.show(true);
+	} catch (error) {
+		vscode.window.showErrorMessage(`Shammah: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+async function showSecurityDashboard() {
+	const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	let status = 'Open a folder to see its status.';
+	try {
+		status = (await callTool('get_compliance_status', { project_path: folder ?? '.' })).result;
+	} catch (error) {
+		status = `Could not reach the Shammah bridge at ${serverUrl()}.`;
+	}
+
+	const counts: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+	diagnosticCollection.forEach((_uri, diagnostics) => {
+		for (const d of diagnostics) {
+			if (d.severity === vscode.DiagnosticSeverity.Error) { counts.high++; }
+			else if (d.severity === vscode.DiagnosticSeverity.Warning) { counts.medium++; }
+			else { counts.low++; }
+		}
 	});
 
-	context.subscriptions.push(disposable);
+	const panel = vscode.window.createWebviewPanel('shammahDashboard', 'Shammah', vscode.ViewColumn.One, {
+		enableScripts: false,
+	});
+	panel.webview.html = dashboardHtml(status, counts);
 }
 
-/**
- * Updates the diagnostics for the given document
- */
-function updateDiagnostics(document: vscode.TextDocument, violations: any[]) {
-	const diagnostics: vscode.Diagnostic[] = [];
-
-	for (const violation of violations) {
-		// This is a simplified example - in reality, you'd need to map the violation to positions in the document
-		const diagnostic = new vscode.Diagnostic(
-			new vscode.Range(0, 0, 0, 10), // Placeholder range
-			violation.message || 'Security issue detected',
-			vscode.DiagnosticSeverity.Warning
-		);
-		
-		diagnostic.code = violation.ruleId;
-		diagnostic.source = 'Security MCP';
-		
-		diagnostics.push(diagnostic);
-	}
-
-	diagnosticCollection.set(document.uri, diagnostics);
+function escapeHtml(text: string): string {
+	return text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 }
 
-/**
- * Returns the HTML for the security dashboard
- */
-function getDashboardHtml(): string {
-	return `
-	<!DOCTYPE html>
-	<html lang="en">
-	<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>Security Dashboard</title>
-		<style>
-			body {
-				font-family: Arial, sans-serif;
-				padding: 20px;
-			}
-			.card {
-				border: 1px solid #ddd;
-				border-radius: 4px;
-				padding: 16px;
-				margin-bottom: 16px;
-				background-color: #f9f9f9;
-			}
-			.high { color: #d73a49; }
-			.medium { color: #d0870f; }
-			.low { color: #0361cc; }
-		</style>
-	</head>
-	<body>
-		<h1>Security Dashboard</h1>
-		<div class="card">
-			<h3>Project Security Status</h3>
-			<p>Total Issues Found: <span id="issueCount">0</span></p>
-			<p>High Severity: <span id="highCount" class="high">0</span></p>
-			<p>Medium Severity: <span id="mediumCount" class="medium">0</span></p>
-			<p>Low Severity: <span id="lowCount" class="low">0</span></p>
-		</div>
-		<div class="card">
-			<h3>Recent Scans</h3>
-			<ul id="scanHistory"></ul>
-		</div>
-		<button onclick="scanCurrentFile()">Scan Current File</button>
-
-		<script>
-			function scanCurrentFile() {
-				const vscode = acquireVsCodeApi();
-				vscode.postMessage({ command: 'scanCurrentFile' });
-			}
-		</script>
-	</body>
-	</html>`;
+function dashboardHtml(status: string, counts: Record<string, number>): string {
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+	<title>Shammah</title>
+	<style>
+		body { font-family: var(--vscode-font-family); padding: 16px; }
+		.card { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: 12px 16px; margin-bottom: 16px; }
+		pre { white-space: pre-wrap; }
+	</style>
+</head>
+<body>
+	<h1>Shammah</h1>
+	<div class="card">
+		<h3>Open files</h3>
+		<p>Errors (critical/high): ${counts.high}</p>
+		<p>Warnings (medium): ${counts.medium}</p>
+		<p>Info (low): ${counts.low}</p>
+	</div>
+	<div class="card">
+		<h3>Rules and project</h3>
+		<pre>${escapeHtml(status)}</pre>
+	</div>
+</body>
+</html>`;
 }

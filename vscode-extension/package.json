@@ -35,7 +35,7 @@
       },
       {
         "command": "security-mcp.applyQuickFix",
-        "title": "Security MCP: Apply Quick Fix"
+        "title": "Security MCP: Show Fix Suggestions"
       }
     ],
     "menus": {
@@ -49,15 +49,10 @@
     "configuration": {
       "title": "Security MCP",
       "properties": {
-        "security-mcp.backendUrl": {
+        "security-mcp.serverUrl": {
           "type": "string",
-          "default": "http://localhost:8000",
-          "description": "URL of the Security MCP backend server"
-        },
-        "security-mcp.apiToken": {
-          "type": "string",
-          "default": "",
-          "description": "Optional token, only needed if your backend sits behind an authenticating proxy"
+          "default": "http://127.0.0.1:8765",
+          "description": "URL of the local Shammah bridge (run `python main.py --bridge` in mcp-server/)"
         },
         "security-mcp.enableRealtimeScanning": {
           "type": "boolean",

@@ -1,34 +1,44 @@
-# Security MCP Extension
+# Shammah for VS Code
 
-The Security MCP extension brings real-time security enforcement to your VS Code editor. It connects to the Security MCP backend to scan your code for vulnerabilities as you type.
-
-## Features
-
-- Real-time scanning of code for security vulnerabilities
-- Integration with the Security MCP backend and rule set
-- Context-aware security recommendations
-- Quick-fix suggestions for common security issues
-- Security dashboard to monitor project health
+Shows Shammah's security findings in the editor as you type, using the same rules coding agents get through MCP.
 
 ## Requirements
 
-- Security MCP backend server running
-- No account or token needed; Shammah is free and open source
+The Shammah bridge running on your machine:
 
-## Extension Settings
+```bash
+cd mcp-server
+pip install -r requirements.txt
+python main.py --bridge        # http://127.0.0.1:8765
+```
 
-This extension contributes the following settings:
+No account or token is needed.
 
-- `security-mcp.backendUrl`: URL of the Security MCP backend server (default: http://localhost:8000)
-- `security-mcp.apiToken`: optional token, only needed if you put your backend behind an authenticating proxy
-- `security-mcp.enableRealtimeScanning`: Enable real-time scanning of code as you type (default: true)
+## Build and install
 
-## Commands
+The extension isn't on the Marketplace yet. Build it from source:
 
-- `security-mcp.scanCurrentFile`: Scan the current file for security vulnerabilities
-- `security-mcp.showSecurityDashboard`: Show the security dashboard
-- `security-mcp.applyQuickFix`: Apply quick fixes for detected security issues
+```bash
+cd vscode-extension
+npm install
+npm run compile
+npx @vscode/vsce package       # creates security-mcp-0.0.1.vsix
+code --install-extension security-mcp-0.0.1.vsix
+```
 
-## Known Issues
+## Features
 
-Currently, this is a basic implementation that connects to the Security MCP backend. Position mapping for diagnostics needs to be implemented based on the actual MCP server response format.
+- Findings in the Problems panel and as squiggles at the exact code: critical/high as errors, medium as warnings, low as info
+- Scans when you open, edit (after a 1-second pause) or save a file
+- **Security MCP: Scan Current File** – scan on demand
+- **Security MCP: Show Fix Suggestions** – fix steps for every issue in the current file
+- **Security MCP: Show Security Dashboard** – issue counts and loaded rules
+
+## Settings
+
+- `security-mcp.serverUrl`: URL of the bridge (default `http://127.0.0.1:8765`)
+- `security-mcp.enableRealtimeScanning`: scan while you type (default `true`)
+
+## Privacy
+
+Your code is sent only to the bridge on your own machine.

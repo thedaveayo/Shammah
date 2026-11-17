@@ -17,7 +17,8 @@ Shammah is a security gate for AI coding agents. It runs as an MCP (Model Contex
 ### Key Features
 - Security checks that coding agents call through MCP tools
 - IDE extensions for VS Code and JetBrains IDEs (early stage)
-- About 1,000 rules generated from CVE and CWE data, plus your own curated rules
+- 21 built-in starter rules, so it works with no other setup
+- More rules generated from CVE and CWE data by the optional backend, plus your own curated rules
 - Rules filtered by your project's technology stack
 - Fix suggestions and plain-language explanations
 - Free and open source under the AGPL-3.0 license
@@ -38,8 +39,29 @@ Shammah is a security gate for AI coding agents. It runs as an MCP (Model Contex
 
 ## Installation
 
-### Backend Server Installation
-The backend fetches CVE/CWE data and builds the rule set. You can run your own.
+### MCP Server Installation (start here)
+1. Clone the repository and install the MCP server:
+   ```bash
+   git clone https://github.com/thedaveayo/Shammah.git
+   cd Shammah/mcp-server
+   pip install -r requirements.txt
+   ```
+
+2. Try it from the command line:
+   ```bash
+   python main.py --check path/to/some_file.py
+   ```
+
+3. Register it with your coding agent, using the absolute path to `main.py`. For Claude Code:
+   ```bash
+   claude mcp add shammah -- python /path/to/Shammah/mcp-server/main.py
+   ```
+   Cursor and VS Code examples are in [mcp-tools.md](mcp-tools.md).
+
+The server comes with 21 starter rules, so this is all you need to get started.
+
+### Backend Server Installation (optional)
+The backend fetches CVE/CWE data and builds a larger rule set that MCP servers download. You can run your own.
 
 1. Clone the repository:
    ```bash
@@ -64,35 +86,20 @@ The backend fetches CVE/CWE data and builds the rule set. You can run your own.
    ```
    The server will be available at `http://127.0.0.1:8000`
 
-### MCP Server Installation
-1. Navigate to the MCP server directory:
-   ```bash
-   cd ../mcp-server
-   ```
-
-2. Install MCP server dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   # Set BACKEND_URL to your backend
-   ```
-
-4. Start the MCP server:
-   ```bash
-   python main.py
-   ```
+5. Point MCP servers at it by setting `BACKEND_URL` in `mcp-server/.env`. They sync on start, or run `python main.py --sync`.
 
 ### IDE Extensions
+The extensions talk to the MCP server's local bridge. Start it with:
+
+```bash
+cd mcp-server
+python main.py --bridge        # http://127.0.0.1:8765
+```
+
 The VS Code extension and JetBrains plugin are not published to the marketplaces yet. Build them from source:
 
 - **VS Code:** see [`vscode-extension/README.md`](../vscode-extension/README.md)
 - **JetBrains IDEs:** see [`jetbrains-plugin/README.md`](../jetbrains-plugin/README.md)
-
-Then set the backend URL in the extension settings.
 
 ## Configuration
 
@@ -125,21 +132,30 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:8000
 The MCP server is configured through `mcp-server/.env`:
 
 ```bash
-BACKEND_URL=http://localhost:8000
-DATABASE_URL=sqlite:///./mcp_local.db
-SYNC_INTERVAL_HOURS=24
+BACKEND_URL=http://localhost:8000   # optional backend for extra rules
 AUTO_SYNC_ON_START=true
+SYNC_TIMEOUT_SECONDS=10
+BRIDGE_PORT=8765                    # local bridge for IDE extensions
 ```
+
+All settings are optional.
 
 ### IDE Extension Configuration
 1. Open your IDE settings
 2. Search for "Security MCP"
-3. Set the backend URL and choose whether to scan as you type
+3. Set the bridge URL (default `http://127.0.0.1:8765`) and choose whether to scan as you type
 
 ## Using Shammah
 
 ### With a coding agent
-Register the MCP server with your agent (see [mcp-tools.md](mcp-tools.md) for Cursor and VS Code examples). The agent can then call `enforce_security` on code it writes and get back violations to fix.
+Register the MCP server with your agent (see [mcp-tools.md](mcp-tools.md) for Claude Code, Cursor and VS Code examples). The agent can then call `enforce_security` on code it writes and get back violations to fix. To make that automatic, add this to your project instructions (`CLAUDE.md`, `.cursorrules`, ...):
+
+> Before writing code, call the `enforce_security` tool with the code and its language. If it says BLOCKED, fix the issues and check again.
+
+### From the command line
+```bash
+python mcp-server/main.py --check src/app.py   # exit code 1 if anything blocks
+```
 
 ### Manual Scanning
 
@@ -162,14 +178,15 @@ Register the MCP server with your agent (see [mcp-tools.md](mcp-tools.md) for Cu
 
 ### Tutorial 1: Setting Up Shammah for a New Project
 
-1. **Run the backend** following the installation steps above.
-2. **Load rules:** with `ADMIN_API_KEY` set, fetch CWE and CVE data:
+1. **Install the MCP server** and register it with your coding agent (see Installation).
+2. **Tell the agent to use it** by adding the instruction above to your project instructions.
+3. **Start coding.** The agent checks generated code with `enforce_security` and fixes anything that's blocked.
+4. **Optional: more rules.** Run the backend, set `ADMIN_API_KEY`, fetch CWE and CVE data, then sync:
    ```bash
    curl -X POST http://localhost:8000/api/fetch/cwe -H "Authorization: Bearer $ADMIN_API_KEY"
    curl -X POST http://localhost:8000/api/fetch/cve -H "Authorization: Bearer $ADMIN_API_KEY"
+   python mcp-server/main.py --sync
    ```
-3. **Run the MCP server** and register it with your coding agent.
-4. **Start coding.** The agent checks generated code with `enforce_security`.
 
 ### Tutorial 2: Understanding Security Alerts
 
@@ -198,16 +215,20 @@ Suggestion: Use parameterized queries instead of string concatenation
 
 ### Common Issues
 
-**Extension not connecting to backend**
-- Check that the backend is running at the configured URL
-- If the backend runs on another machine, set `HOST=0.0.0.0` and add the extension's origin to `CORS_ORIGINS`
+**Extension not connecting**
+- Start the bridge: `python main.py --bridge` in `mcp-server/`
+- Check `http://127.0.0.1:8765/health` responds and the extension's server URL matches
+
+**Agent doesn't see the Shammah tools**
+- Use the absolute path to `mcp-server/main.py` in the agent's MCP config
+- Make sure `command` is a Python that has the requirements installed (e.g. your virtual environment's Python)
 
 **Admin routes return 503**
 - Set `ADMIN_API_KEY` in `backend/.env` and restart the backend
 
 **No security alerts appearing**
-- Check that rules have been fetched: `curl http://localhost:8000/api/stats`
-- Check that your project's technology stack is supported
+- Ask the agent to run `get_compliance_status` to see how many rules are loaded
+- Pass the right `language`; rules are filtered by language
 
 **False positive alerts**
 - Open an issue with a minimal code sample so the rule can be improved
@@ -230,7 +251,7 @@ A: It is built for AI coding agents: the agent checks code through MCP while it 
 A: Pattern matching runs locally in the MCP server. Code is only sent to an LLM provider if you call the quick-fix route on a backend that has an LLM key configured.
 
 **Q: Can Shammah be used offline?**
-A: The MCP server works offline with cached rules. It needs a connection to sync new rules from the backend.
+A: Yes. The MCP server works offline with its starter rules and any rules it synced before. It only needs a connection to sync new rules from a backend.
 
 **Q: What does it cost?**
 A: Nothing. Shammah is free and open source under the AGPL-3.0 license. You pay only for any third-party APIs you choose to use (for example an LLM provider).

@@ -16,9 +16,58 @@ from services.export_generator import ExportGenerator
 from services.cve_fetcher import CVEFetcher
 from services.cwe_fetcher import CWEFetcher
 from services.quick_fix_service import generate_quick_fix_suggestions
-from api.schemas import TelegramIngestRequest
+from api.schemas import TelegramIngestRequest, SyncRequest
+from models.rule import Rule
 
 router = APIRouter()
+
+
+def _rule_for_sync(rule: Rule) -> dict:
+    """Rule fields the MCP server stores locally"""
+    return {
+        "rule_id": rule.rule_id,
+        "rule_type": rule.rule_type,
+        "source": rule.source,
+        "severity": rule.severity,
+        "title": rule.title,
+        "description": rule.description,
+        "cve_refs": rule.cve_refs or [],
+        "cwe_refs": rule.cwe_refs or [],
+        "affected_package": rule.affected_package,
+        "affected_versions": rule.affected_versions,
+        "pattern": rule.pattern,
+        "applies_to": rule.applies_to or {},
+        "source_link": rule.source_link,
+        "enforcement": rule.enforcement,
+    }
+
+
+@router.post("/sync")
+def sync_rules(request: SyncRequest, db: Session = Depends(get_db)):
+    """
+    Rules for the MCP server's local cache (no auth required, read-only).
+
+    Send `last_sync` (ISO timestamp from a previous sync) to get only rules
+    created or changed since then. Rules without a code pattern are skipped,
+    because the MCP server can't match them.
+    """
+    synced_at = datetime.utcnow()
+    query = db.query(Rule)
+
+    if request.last_sync:
+        try:
+            since = datetime.fromisoformat(request.last_sync.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="last_sync must be an ISO 8601 timestamp")
+        query = query.filter((Rule.created_at > since) | (Rule.updated_at > since))
+
+    # JSON columns may store a missing pattern as JSON null, so filter in Python
+    rules = [_rule_for_sync(r) for r in query.all() if r.pattern]
+    return {
+        "new_rules": rules,
+        "total": len(rules),
+        "synced_at": synced_at.isoformat(),
+    }
 
 
 def require_admin(authorization: Optional[str] = Header(None)):

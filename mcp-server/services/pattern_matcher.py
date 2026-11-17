@@ -4,7 +4,12 @@ Matches code against rule patterns (regex/AST)
 """
 import re
 import ast
+import logging
 from typing import List, Dict, Optional, Tuple
+
+# Log to stderr only: in MCP stdio mode, stdout carries the protocol.
+logger = logging.getLogger(__name__)
+
 
 class PatternMatcher:
     """Matches code against security rule patterns"""
@@ -37,6 +42,11 @@ class PatternMatcher:
         if pattern_type == "regex":
             return self._match_regex(code, pattern_value)
         elif pattern_type == "ast":
+            # Generated rules put a regex in "value" even for type "ast".
+            # Use it when present, so each rule only fires on its own pattern;
+            # the built-in heuristics below are a fallback for rules without one.
+            if pattern_value:
+                return self._match_regex(code, pattern_value)
             if language.lower() == "javascript":
                 return self._match_javascript_ast(code, pattern_value)
             elif language.lower() == "python":
@@ -56,7 +66,7 @@ class PatternMatcher:
             if match:
                 return match.group(0)
         except re.error:
-            print(f"Invalid regex pattern: {pattern}")
+            logger.warning("Invalid regex pattern: %s", pattern)
         return None
 
     def _match_javascript_ast(self, code: str, pattern: str) -> Optional[str]:
@@ -160,7 +170,7 @@ class PatternMatcher:
             # If we can't parse the Python code, fall back to regex
             return self._match_regex(code, pattern)
         except Exception as e:
-            print(f"Error in Python AST matching: {e}")
+            logger.warning("Error in Python AST matching: %s", e)
             # Fall back to regex if AST parsing fails
             return self._match_regex(code, pattern)
 

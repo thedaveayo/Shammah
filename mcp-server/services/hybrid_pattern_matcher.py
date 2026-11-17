@@ -5,7 +5,10 @@ Combines regex and AST-based pattern matching for enhanced accuracy
 import re
 import ast
 from typing import List, Dict, Optional, Tuple
+import logging
 from services.pattern_matcher import PatternMatcher
+
+logger = logging.getLogger(__name__)
 
 class HybridPatternMatcher:
     """Matches code against security rule patterns using both regex and AST approaches"""
@@ -167,6 +170,6 @@ class HybridPatternMatcher:
             # If we can't parse the Python code, return None to let regex handle it
             return None
         except Exception as e:
-            print(f"Error in Python AST matching: {e}")
+            logger.warning("Error in Python AST matching: %s", e)
             # Return None to let regex handle it
             return None
