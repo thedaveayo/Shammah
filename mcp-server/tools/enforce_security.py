@@ -4,6 +4,7 @@ Security enforcement tools
 """
 from mcp.server import Server
 from mcp.types import Tool, TextContent
+import re
 import sys
 import os
 

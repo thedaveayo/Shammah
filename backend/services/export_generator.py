@@ -5,7 +5,7 @@ Generates human-readable rules.json for open-source archive
 import json
 import os
 from datetime import datetime
-from typing import List
+from typing import Dict, List
 from models.rule import Rule
 
 class ExportGenerator:

@@ -3,6 +3,7 @@ CWE Fetcher Service
 Fetches CWE taxonomy from MITRE and converts to enforcement rules via LLM
 """
 import requests
+from datetime import datetime
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Optional
 from models.rule import Rule
