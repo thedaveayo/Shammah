@@ -8,9 +8,9 @@ import json
 from datetime import datetime
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
-from config import BACKEND_URL, AUTH_TOKEN
+from sqlalchemy import func
+from config import BACKEND_URL
 from models.rule import LocalRule
-from models.subscription import LocalSubscription
 
 class RuleSync:
     """Syncs rules from backend to local cache with efficient optimizations"""
@@ -18,13 +18,12 @@ class RuleSync:
     def __init__(self, db: Session):
         self.db = db
         self.backend_url = BACKEND_URL
-        self.auth_token = AUTH_TOKEN
         # Cache for rule checksums to detect changes efficiently
         self.rule_checksums = {}
 
-    def get_subscription(self) -> Optional[LocalSubscription]:
-        """Get local subscription"""
-        return self.db.query(LocalSubscription).first()
+    def get_last_sync(self) -> Optional[datetime]:
+        """Most recent time any local rule was synced"""
+        return self.db.query(func.max(LocalRule.synced_at)).scalar()
 
     def sync_rules(self, stack: Dict = None) -> Dict:
         """
@@ -35,28 +34,14 @@ class RuleSync:
         - Includes caching for repeated requests
         Returns sync result with status
         """
-        subscription = self.get_subscription()
-
-        if not subscription:
-            return {
-                "status": "no_subscription",
-                "message": "No subscription found. Activate with: security-mcp activate --token <token>"
-            }
-
-        if not subscription.is_valid() and not subscription.is_in_grace_period():
-            return {
-                "status": "expired",
-                "message": "Subscription expired. Renew to continue receiving security updates."
-            }
-
         # Prepare sync request with efficiency optimizations
-        last_sync = subscription.last_sync.isoformat() if subscription.last_sync else None
+        last_synced_at = self.get_last_sync()
+        last_sync = last_synced_at.isoformat() if last_synced_at else None
         
         # Get checksums of current rules to enable incremental sync
         local_checksums = self._get_local_rule_checksums()
         
         headers = {
-            "Authorization": f"Bearer {subscription.auth_token}",
             "Content-Type": "application/json",
             "X-Checksum-Method": "sha256"  # Indicate we support checksum-based sync
         }
@@ -77,12 +62,6 @@ class RuleSync:
                 stream=False  # We'll handle compression ourselves if needed
             )
 
-            if response.status_code == 401:
-                return {
-                    "status": "expired",
-                    "message": "Subscription expired or invalid"
-                }
-
             response.raise_for_status()
             sync_data = response.json()
 
@@ -94,8 +73,6 @@ class RuleSync:
                 # Fallback to full sync
                 self._save_rules(sync_data.get("new_rules", []))
 
-            # Update subscription last_sync
-            subscription.last_sync = datetime.utcnow()
             self.db.commit()
 
             # Update local checksums cache

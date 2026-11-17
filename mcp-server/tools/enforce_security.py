@@ -161,7 +161,7 @@ def register_tools(server: Server, get_db_func):
             ),
             Tool(
                 name="sync_rules",
-                description="Sync latest security rules from backend (requires active subscription)",
+                description="Sync latest security rules from the configured backend",
                 inputSchema={
                     "type": "object",
                     "properties": {}
@@ -202,21 +202,16 @@ async def enforce_security(db, arguments: dict):
     """Validate code against security rules"""
     from models.rule import LocalRule
     from services.pattern_matcher import PatternMatcher
-    from services.subscription import LocalSubscriptionManager
     from services.enforcer import Enforcer
 
     code = arguments.get("code", "")
-
-    # Get subscription
-    sub_manager = LocalSubscriptionManager(db)
-    subscription = sub_manager.get_subscription()
 
     # Get rules
     rules = db.query(LocalRule).all()
 
     # Enforce
     enforcer = Enforcer()
-    result = enforcer.enforce(code, rules, subscription)
+    result = enforcer.enforce(code, rules)
 
     return [TextContent(
         type="text",
@@ -227,7 +222,6 @@ async def security_scan_file(db, arguments: dict):
     """Scan a specific file for security vulnerabilities"""
     from models.rule import LocalRule
     from services.pattern_matcher import PatternMatcher
-    from services.subscription import LocalSubscriptionManager
     from services.enforcer import Enforcer
     import os
 
@@ -250,10 +244,6 @@ async def security_scan_file(db, arguments: dict):
             type="text",
             text=f"Error reading file: {str(e)}"
         )]
-
-    # Get subscription
-    sub_manager = LocalSubscriptionManager(db)
-    subscription = sub_manager.get_subscription()
 
     # Get rules
     rules = db.query(LocalRule).all()
@@ -545,16 +535,14 @@ async def security_rule_details(db, arguments: dict):
 def get_compliance_status(db, arguments: dict):
     """Get project compliance status"""
     from models.rule import LocalRule
-    from models.subscription import LocalSubscription
+    from sqlalchemy import func
     from services.infra_detector import InfrastructureDetector
     
     project_path = arguments.get("project_path", ".")
     
-    # Get subscription
-    subscription = db.query(LocalSubscription).first()
-    
-    # Get rules count
+    # Get rules count and last sync time
     rules_count = db.query(LocalRule).count()
+    last_sync = db.query(func.max(LocalRule.synced_at)).scalar()
     
     # Detect infrastructure
     detector = InfrastructureDetector()
@@ -562,8 +550,8 @@ def get_compliance_status(db, arguments: dict):
     
     return [TextContent(
         type="text",
-        text=f"""Subscription: {subscription.user_id if subscription else 'None'}
-Rules loaded: {rules_count}
+        text=f"""Rules loaded: {rules_count}
+Last sync: {last_sync.isoformat() if last_sync else 'never'}
 Detected stack: {stack}"""
     )]
 

@@ -3,10 +3,12 @@
 End-to-End Test Script
 Tests backend API and basic functionality
 """
+import os
 import requests
 import json
 
-BACKEND_URL = "http://localhost:8000"
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 
 def test_health():
     """Test health endpoint"""
@@ -23,30 +25,17 @@ def test_root():
     assert data["status"] == "running"
     print(f"✓ Root endpoint: {data['name']} v{data['version']}")
 
-def test_create_subscription():
-    """Test subscription creation"""
-    payload = {
-        "user_id": "test_user_dave",
-        "email": "dave@test.com"
-    }
-    r = requests.post(f"{BACKEND_URL}/api/auth/subscribe", json=payload)
-    if r.status_code == 200:
-        data = r.json()
-        print(f"✓ Subscription created: {data['user_id']}")
-        print(f"  Token: {data['auth_token'][:30]}...")
-        print(f"  Expires in: {data['days_until_expiry']} days")
-        return data['auth_token']
-    else:
-        print(f"⚠ Subscription test skipped (may already exist): {r.status_code}")
+def test_telegram_ingest():
+    """Test Telegram message ingestion (needs ADMIN_API_KEY)"""
+    if not ADMIN_API_KEY:
+        print("⚠ Telegram ingest skipped: set ADMIN_API_KEY to test admin routes")
         return None
-
-def test_telegram_ingest(token):
-    """Test Telegram message ingestion"""
     payload = {
         "message_text": "Critical Firebase auth bypass allows any user to read all database records. severity: critical. https://example.com/security-alert",
         "message_date": "2026-04-29T20:00:00Z"
     }
-    r = requests.post(f"{BACKEND_URL}/api/rules/telegram", json=payload)
+    headers = {"Authorization": f"Bearer {ADMIN_API_KEY}"}
+    r = requests.post(f"{BACKEND_URL}/api/rules/telegram", json=payload, headers=headers)
     if r.status_code == 200:
         data = r.json()
         print(f"✓ Telegram rule created: {data['rule_id']}")
@@ -55,10 +44,9 @@ def test_telegram_ingest(token):
         print(f"✗ Telegram ingest failed: {r.status_code} - {r.text}")
         return False
 
-def test_get_stats(token):
+def test_get_stats():
     """Test getting rule statistics"""
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    r = requests.get(f"{BACKEND_URL}/api/stats", headers=headers)
+    r = requests.get(f"{BACKEND_URL}/api/stats")
     if r.status_code == 200:
         data = r.json()
         print(f"✓ Rule stats: {data}")
@@ -80,7 +68,7 @@ def test_public_rules():
 
 def main():
     print("=" * 60)
-    print("Security MCP - End-to-End Test")
+    print("Shammah - End-to-End Test")
     print("=" * 60)
     
     try:
@@ -88,14 +76,11 @@ def main():
         test_health()
         test_root()
         
-        # Test subscription
-        token = test_create_subscription()
-        
         # Test Telegram ingestion
-        test_telegram_ingest(token)
-        
+        test_telegram_ingest()
+
         # Test stats
-        test_get_stats(token)
+        test_get_stats()
         
         # Test public rules
         test_public_rules()

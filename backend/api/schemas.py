@@ -42,24 +42,10 @@ class SyncRequest(BaseModel):
 
 class SyncResponse(BaseModel):
     """Schema for MCP sync response"""
-    subscription_status: str
     new_rules: Optional[List[Dict]] = []
     updated_rules: Optional[List[Dict]] = []
     deleted_rule_ids: Optional[List[str]] = []
     synced_at: str
-
-class SubscriptionRequest(BaseModel):
-    """Schema for subscription creation"""
-    user_id: str
-    email: Optional[str] = None
-
-class SubscriptionResponse(BaseModel):
-    """Schema for subscription response"""
-    user_id: str
-    status: str
-    auth_token: Optional[str] = None
-    expires_at: Optional[str] = None
-    days_until_expiry: Optional[int] = None
 
 class TelegramIngestRequest(BaseModel):
     """Schema for Telegram message ingestion"""
@@ -69,6 +55,5 @@ class TelegramIngestRequest(BaseModel):
 class ComplianceStatus(BaseModel):
     """Schema for compliance status response"""
     compliant: bool
-    subscription_status: str
     total_violations: int
     violations_by_severity: Dict[str, int]

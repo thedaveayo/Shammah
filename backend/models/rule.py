@@ -37,7 +37,7 @@ class Rule(Base):
     # Enforcement
     enforcement = Column(JSON, nullable=False)  # {"level": "block", "message": "...", "required_actions": [...]}
     
-    # Subscription enforcement
+    # Optional expiry
     expires_at = Column(DateTime, nullable=True)
     
     # Metadata

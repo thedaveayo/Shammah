@@ -1,0 +1,23 @@
+Shammah
+Copyright (C) 2026 TheDaveAyo and Shammah contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, version 3 of the License, or (at your option) any later
+version. See the LICENSE file for details.
+
+-------------------------------------------------------------------------------
+Third-party data
+-------------------------------------------------------------------------------
+
+Common Weakness Enumeration (CWE)
+  Security rules in this project are derived in part from the CWE List.
+  CWE is a registered trademark of The MITRE Corporation.
+  Copyright (C) 2006-2026, The MITRE Corporation. CWE, CWSS, CWRAF, and the
+  CWE logo are trademarks of The MITRE Corporation.
+  Terms of use: https://cwe.mitre.org/about/termsofuse.html
+
+National Vulnerability Database (NVD)
+  This product uses data from the NVD API but is not endorsed or certified by
+  the NVD.
+  https://nvd.nist.gov/

@@ -16,11 +16,10 @@ Validates code against security rules. Returns violations that must be fixed bef
 }
 ```
 
-**Response (Active Subscription - Violation Found):**
+**Response (violation found):**
 ```json
 {
   "blocked": true,
-  "subscription_status": "active",
   "compliant": false,
   "violations": [
     {
@@ -38,15 +37,15 @@ Validates code against security rules. Returns violations that must be fixed bef
 }
 ```
 
-**Response (Expired Subscription):**
+**Response (no violations):**
 ```json
 {
   "blocked": false,
-  "subscription_status": "expired",
-  "message": "⚠️ SECURITY SUBSCRIPTION EXPIRED\n\nYour code may have security issues.\nRenew to view detailed security reports.",
-  "renewal_link": "https://security-mcp.com/renew"
+  "compliant": true
 }
 ```
+
+Critical, high and medium findings block. Low findings are returned as warnings with `"blocked": false`.
 
 ---
 
@@ -63,8 +62,8 @@ Get current security compliance status of the project.
 
 **Response:**
 ```
-Subscription: user123
 Rules loaded: 650
+Last sync: 2026-04-29T12:00:00
 Detected stack: {
   "languages": ["python@3.11", "javascript@18"],
   "frameworks": ["flask@2.3", "react@18.2"],
@@ -120,7 +119,7 @@ Detect project infrastructure (languages, frameworks, etc.).
 
 ## 5. `sync_rules`
 
-Sync latest security rules from backend (requires active subscription).
+Sync latest security rules from the backend set in `BACKEND_URL`.
 
 **Parameters:** None (auto-detects stack)
 
@@ -169,13 +168,12 @@ Add to `settings.json`:
 
 ---
 
-## Subscription States
+## Enforcement Levels
 
-| State | `enforce_security` Behavior |
-|-------|----------------------------|
-| **Active** | Full enforcement (block on critical/high/medium) |
-| **Grace Period (0-7 days expired)** | Full enforcement with warnings |
-| **Expired (7+ days)** | Vague warnings only, can proceed |
+| Severity | `enforce_security` Behavior |
+|----------|----------------------------|
+| **Critical / High / Medium** | Blocked until fixed |
+| **Low** | Warning only, can proceed |
 
 ---
 
@@ -189,6 +187,4 @@ All tools return errors in this format:
 ```
 
 Common errors:
-- `No subscription found` - User needs to activate MCP
-- `Subscription expired` - User needs to renew
 - `Sync failed` - Backend unreachable

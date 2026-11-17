@@ -12,15 +12,10 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from models.rule import Rule
-from models.subscription import Subscription
 from services.rule_generator import llm_extract_cwe_patterns, llm_extract_telegram_rule
-from services.subscription import SubscriptionService
 from services.quick_fix_service import generate_quick_fix_suggestions
-from services.advanced_auth_service import AdvancedAuthService, Role, Permission
 from services.cve_fetcher import CVEFetcher
 from services.cwe_fetcher import CWEFetcher
-from services.pattern_matcher import PatternMatcher
-from services.hybrid_pattern_matcher import HybridPatternMatcher
 
 
 class TestRuleModel:
@@ -69,78 +64,6 @@ class TestRuleModel:
         assert rule_dict["severity"] == "high"
         assert rule_dict["title"] == "Test Rule"
         assert "CWE-79" in rule_dict["cwe_refs"]
-
-
-class TestSubscriptionModel:
-    """Test Subscription model functionality"""
-    
-    def test_create_subscription(self):
-        """Test creating a new subscription"""
-        expires_at = datetime.utcnow() + timedelta(days=30)
-        subscription = Subscription(
-            user_id="test-user-123",
-            email="test@example.com",
-            is_active=True,
-            expires_at=expires_at,
-            auth_token="fake-jwt-token"
-        )
-        
-        assert subscription.user_id == "test-user-123"
-        assert subscription.email == "test@example.com"
-        assert subscription.is_active == True
-        assert subscription.is_valid() == True
-        assert subscription.days_until_expiry() == 30
-    
-    def test_subscription_expiry(self):
-        """Test subscription expiration logic"""
-        # Expired subscription
-        expired_date = datetime.utcnow() - timedelta(days=1)
-        expired_sub = Subscription(
-            user_id="test-user-123",
-            email="test@example.com",
-            is_active=True,
-            expires_at=expired_date,
-            auth_token="fake-jwt-token"
-        )
-        
-        assert expired_sub.is_valid() == False
-        assert expired_sub.days_until_expiry() == -1
-        
-        # Subscription in grace period (within 7 days of expiry)
-        grace_period_date = datetime.utcnow() - timedelta(days=3)
-        grace_sub = Subscription(
-            user_id="test-user-123",
-            email="test@example.com",
-            is_active=True,
-            expires_at=grace_period_date,
-            auth_token="fake-jwt-token"
-        )
-        
-        assert grace_sub.is_in_grace_period() == True
-        assert grace_sub.is_valid() == False
-
-
-class TestSubscriptionService:
-    """Test Subscription Service functionality"""
-    
-    def test_create_subscription(self):
-        """Test creating a new subscription"""
-        service = SubscriptionService()
-        
-        # Mock database session
-        mock_db = Mock()
-        mock_db.query().filter().first.return_value = None  # No existing subscription
-        mock_db.add = Mock()
-        mock_db.commit = Mock()
-        mock_db.refresh = Mock()
-        
-        with patch('services.subscription.SessionLocal', return_value=mock_db):
-            subscription = service.create_subscription("test-user-123", "test@example.com")
-            
-            assert subscription.user_id == "test-user-123"
-            assert subscription.email == "test@example.com"
-            assert subscription.is_active == True
-            assert subscription.auth_token is not None
 
 
 class TestRuleGenerator:
@@ -246,127 +169,6 @@ class TestQuickFixService:
         assert len(fixes) == 1
         assert fixes[0]["title"] == "Use parameterized queries"
         assert "parameterized queries" in fixes[0]["description"]
-
-
-class TestAdvancedAuthService:
-    """Test Advanced Authentication Service"""
-    
-    def test_create_user(self):
-        """Test creating a new user"""
-        auth_service = AdvancedAuthService()
-        
-        # Mock database session
-        mock_db = Mock()
-        mock_db.query().filter().first.return_value = None  # User doesn't exist yet
-        mock_db.add = Mock()
-        mock_db.commit = Mock()
-        mock_db.refresh = Mock()
-        
-        with patch('services.advanced_auth_service.SessionLocal', return_value=mock_db):
-            user = auth_service.create_user(
-                user_id="test-user",
-                email="test@example.com",
-                roles=[Role.DEVELOPER]
-            )
-            
-            assert user.user_id == "test-user"
-            assert user.email == "test@example.com"
-            assert Role.DEVELOPER in user.roles
-    
-    def test_has_permission(self):
-        """Test permission checking"""
-        auth_service = AdvancedAuthService()
-        
-        # Create a fake token with permissions
-        fake_token = "fake.token.here"
-        
-        # Mock the verify_token method to return a user with specific permissions
-        with patch.object(auth_service, 'verify_token', return_value={
-            "user_id": "test-user",
-            "permissions": [Permission.READ_RULES.value, Permission.SUBSCRIPTION_MANAGE.value]
-        }):
-            # Test if user has READ_RULES permission
-            assert auth_service.has_permission(fake_token, Permission.READ_RULES) == True
-            # Test if user has MANAGE_USERS permission (should be False)
-            assert auth_service.has_permission(fake_token, Permission.MANAGE_USERS) == False
-
-
-class TestPatternMatcher:
-    """Test Pattern Matching functionality"""
-    
-    def test_regex_matching(self):
-        """Test basic regex pattern matching"""
-        matcher = PatternMatcher()
-        
-        # Test basic regex matching
-        code = 'var userInput = req.query.input; document.body.innerHTML = userInput;'
-        pattern = {"type": "regex", "value": "innerHTML", "language": "javascript"}
-        
-        result = matcher._match_rule(code, type('obj', (object,), {'pattern': pattern})())
-        
-        assert result is not None
-        assert "innerHTML" in result
-    
-    def test_javascript_ast_matching(self):
-        """Test JavaScript AST pattern matching"""
-        matcher = PatternMatcher()
-        
-        # Test JavaScript code with eval
-        code = '''
-        function processInput(input) {
-            return eval(input);
-        }
-        '''
-        
-        # This should detect the eval usage
-        result = matcher._match_javascript_ast(code, "")
-        
-        assert result is not None
-        assert "eval" in result
-    
-    def test_python_ast_matching(self):
-        """Test Python AST pattern matching"""
-        matcher = PatternMatcher()
-        
-        # Test Python code with eval
-        code = '''
-def process_input(input_str):
-    return eval(input_str)
-        '''
-        
-        result = matcher._match_python_ast(code, "")
-        
-        assert result is not None
-        assert "eval" in result or "Dangerous function" in result
-
-
-class TestHybridPatternMatcher:
-    """Test Hybrid Pattern Matching functionality"""
-    
-    def test_hybrid_matching(self):
-        """Test hybrid pattern matching combining regex and AST"""
-        hybrid_matcher = HybridPatternMatcher()
-        
-        # Test code with potential security issues
-        code = '''
-        function processInput(input) {
-            document.body.innerHTML = input;
-            return eval(input);
-        }
-        '''
-        
-        # Create a mock rule object
-        class MockRule:
-            def __init__(self):
-                self.pattern = {"type": "ast", "value": "some_pattern", "language": "javascript"}
-        
-        mock_rule = MockRule()
-        rules = [mock_rule]
-        
-        results = hybrid_matcher.match(code, rules)
-        
-        # Should find matches using AST analysis
-        assert len(results) >= 0  # May vary depending on implementation
 
 
 class TestCVEFetcher:

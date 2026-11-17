@@ -1,16 +1,16 @@
-# Security MCP Server Requirements
+# Shammah MCP Server Requirements
 
 # MCP SDK
-mcp==1.0.0
+mcp>=1.0.0
 
 # Database
-sqlalchemy==2.0.25
+sqlalchemy>=2.0.30,<3
 
 # HTTP Client
-requests==2.31.0
+requests>=2.32.4,<3
 
 # Environment
-python-dotenv==1.0.0
+python-dotenv>=1.0.1
 
 # Infrastructure Detection
 # (uses standard library: json, re, os, pathlib)

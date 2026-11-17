@@ -1,24 +1,31 @@
 """
-Simple Web Interface for GitHub Repo Scanning
-Flask-based API for the $2/scan service
+Shammah Web Interface
+A small local web page for scanning a public GitHub repository.
+
+Run it on your own machine:  python app.py  ->  http://127.0.0.1:5000
 """
-from flask import Flask, request, jsonify, render_template_string
 import os
-from services.github_repo_scanner import GitHubRepoScanner
+import sys
+
+from flask import Flask, request, jsonify, render_template_string
+
+# The scanner lives in the MCP server package
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mcp-server"))
+from services.github_repo_scanner import GitHubRepoScanner  # noqa: E402
 
 app = Flask(__name__)
 scanner = GitHubRepoScanner()
 
-# Simple HTML template for the web interface
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Security MCP - GitHub Repo Scanner</title>
+    <meta charset="utf-8">
+    <title>Shammah - GitHub Repo Scanner</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; }
         .container { max-width: 800px; margin: 0 auto; }
-        input[type="text"] { width: 100%; padding: 10px; margin: 10px 0; }
+        input[type="text"] { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
         button { background: #007bff; color: white; padding: 10px 20px; border: none; cursor: pointer; }
         button:hover { background: #0056b3; }
         .result { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }
@@ -28,61 +35,65 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>Security MCP - GitHub Repo Scanner</h1>
-        <p>Scan any public GitHub repository for security vulnerabilities. Cost: $2 per scan.</p>
-        
+        <h1>Shammah - GitHub Repo Scanner</h1>
+        <p>Scan a public GitHub repository for security vulnerabilities.</p>
+
         <form id="scanForm">
             <label for="repoUrl">GitHub Repository URL:</label>
             <input type="text" id="repoUrl" name="repoUrl" placeholder="https://github.com/username/repository" required>
-            <button type="submit">Scan Repository ($2)</button>
+            <button type="submit">Scan Repository</button>
         </form>
-        
+
         <div id="result"></div>
     </div>
 
     <script>
+        function el(tag, text, cls) {
+            const node = document.createElement(tag);
+            if (text !== undefined) node.textContent = text;
+            if (cls) node.className = cls;
+            return node;
+        }
+
         document.getElementById('scanForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const repoUrl = document.getElementById('repoUrl').value;
             const resultDiv = document.getElementById('result');
-            
-            resultDiv.innerHTML = '<p class="success">Processing your scan request...</p>';
-            
+            resultDiv.replaceChildren(el('p', 'Scanning... this can take a minute for large repositories.', 'success'));
+
             try {
-                // In a real implementation, this would go through a payment processor
-                // For demo, we'll simulate the payment and scan
                 const response = await fetch('/api/scan', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ repo_url: repoUrl })
                 });
-                
                 const data = await response.json();
-                
+
                 if (data.error) {
-                    resultDiv.innerHTML = `<div class="result error"><strong>Error:</strong> ${data.error}</div>`;
-                } else {
-                    resultDiv.innerHTML = `
-                        <div class="result">
-                            <h3>Scan Results for ${repoUrl}</h3>
-                            <p><strong>Files Scanned:</strong> ${data.files_scanned}</p>
-                            <p><strong>Issues Found:</strong> ${data.issues_found}</p>
-                            <p><strong>Issues by Severity:</strong></p>
-                            <ul>
-                                <li>Critical: ${data.issues_by_severity.critical}</li>
-                                <li>High: ${data.issues_by_severity.high}</li>
-                                <li>Medium: ${data.issues_by_severity.medium}</li>
-                                <li>Low: ${data.issues_by_severity.low}</li>
-                            </ul>
-                            <p><em>Full report would include detailed findings and fix suggestions.</em></p>
-                        </div>
-                    `;
+                    resultDiv.replaceChildren(el('div', 'Error: ' + data.error, 'result error'));
+                    return;
                 }
+
+                const box = el('div', undefined, 'result');
+                box.append(el('h3', 'Scan results for ' + repoUrl));
+                box.append(el('p', 'Files scanned: ' + data.files_scanned));
+                box.append(el('p', 'Issues found: ' + data.issues_found));
+                const sev = el('ul');
+                for (const level of ['critical', 'high', 'medium', 'low']) {
+                    sev.append(el('li', level + ': ' + data.issues_by_severity[level]));
+                }
+                box.append(sev);
+                if (data.issues && data.issues.length) {
+                    const list = el('ol');
+                    for (const issue of data.issues.slice(0, 200)) {
+                        list.append(el('li', '[' + issue.severity + '] ' + issue.file_path + ' - ' + issue.title));
+                    }
+                    box.append(list);
+                }
+                resultDiv.replaceChildren(box);
             } catch (error) {
-                resultDiv.innerHTML = `<div class="result error"><strong>Error:</strong> ${error.message}</div>`;
+                resultDiv.replaceChildren(el('div', 'Error: ' + error.message, 'result error'));
             }
         });
     </script>
@@ -90,72 +101,35 @@ HTML_TEMPLATE = """
 </html>
 """
 
+
 @app.route('/')
 def index():
     """Render the main page"""
     return render_template_string(HTML_TEMPLATE)
 
+
 @app.route('/api/scan', methods=['POST'])
 def scan_repo():
-    """API endpoint to scan a GitHub repository"""
-    try:
-        data = request.json
-        repo_url = data.get('repo_url')
-        
-        if not repo_url:
-            return jsonify({'error': 'Repository URL is required'}), 400
-        
-        # In a real implementation, this is where we would:
-        # 1. Process payment ($2)
-        # 2. Validate the repo exists
-        # 3. Perform the actual scan
-        
-        # For this demo, we'll simulate a scan
-        # In reality, we'd call scanner.scan_github_repo(repo_url)
-        results = {
-            'repo_url': repo_url,
-            'files_scanned': 24,  # Simulated
-            'issues_found': 3,    # Simulated
-            'issues_by_severity': {
-                'critical': 0,
-                'high': 1,
-                'medium': 2,
-                'low': 0
-            },
-            'payment_processed': True,
-            'cost': 2.00
-        }
-        
-        return jsonify(results)
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    """Scan a public GitHub repository"""
+    data = request.get_json(silent=True) or {}
+    repo_url = (data.get('repo_url') or '').strip()
 
-@app.route('/api/process-payment', methods=['POST'])
-def process_payment():
-    """API endpoint to process payment for a scan"""
+    if not repo_url:
+        return jsonify({'error': 'Repository URL is required'}), 400
+
     try:
-        data = request.json
-        amount = data.get('amount', 0)
-        repo_url = data.get('repo_url')
-        
-        if amount != 2.00:
-            return jsonify({'error': 'Incorrect amount for repository scan'}), 400
-        
-        if not repo_url:
-            return jsonify({'error': 'Repository URL is required'}), 400
-        
-        # In a real implementation, this would process the payment
-        # using a payment processor like Stripe
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Payment processed successfully',
-            'transaction_id': 'txn_' + os.urandom(8).hex()
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        results = scanner.scan_github_repo(repo_url)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception:
+        app.logger.exception("Scan failed")
+        return jsonify({'error': 'Scan failed. Check that the repository exists and is public.'}), 500
+
+    results.pop('repo_path', None)  # don't expose local temp paths
+    return jsonify(results)
+
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    host = os.getenv('HOST', '127.0.0.1')
+    port = int(os.getenv('PORT', '5000'))
+    app.run(host=host, port=port, debug=False)

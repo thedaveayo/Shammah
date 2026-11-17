@@ -3,6 +3,16 @@
   "displayName": "Security MCP",
   "description": "Security enforcement for code as you type",
   "version": "0.0.1",
+  "publisher": "thedaveayo",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thedaveayo/Shammah.git",
+    "directory": "vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/thedaveayo/Shammah/issues"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -47,7 +57,7 @@
         "security-mcp.apiToken": {
           "type": "string",
           "default": "",
-          "description": "API token for authenticating with the Security MCP backend"
+          "description": "Optional token, only needed if your backend sits behind an authenticating proxy"
         },
         "security-mcp.enableRealtimeScanning": {
           "type": "boolean",

@@ -127,7 +127,7 @@
     "expires_at": {
       "type": "string",
       "format": "date-time",
-      "description": "Rule expiry (30 days from sync for subscription enforcement)"
+      "description": "Optional rule expiry date"
     },
     "metadata": {
       "type": "object",

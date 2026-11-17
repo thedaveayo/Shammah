@@ -6,7 +6,6 @@ from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from models.rule import Rule
-from models.subscription import Subscription
 
 class RuleCache:
     """Database operations for rules"""

@@ -2,7 +2,7 @@
   <id>com.securitymcp.plugin</id>
   <name>Security MCP</name>
   <version>0.0.1</version>
-  <vendor email="support@securitymcp.com" url="https://securitymcp.com">Security MCP</vendor>
+  <vendor url="https://github.com/thedaveayo/Shammah">Shammah</vendor>
 
   <description><![CDATA[
   Security enforcement for code as you type.

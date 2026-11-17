@@ -25,7 +25,14 @@ class GitHubRepoScanner:
         """Validate that the URL is a valid GitHub repository URL"""
         try:
             parsed = urlparse(url)
-            return parsed.netloc in ['github.com', 'www.github.com'] and len(parsed.path.split('/')) >= 3
+            parts = [p for p in parsed.path.split('/') if p]
+            return (
+                parsed.scheme == 'https'
+                and parsed.netloc in ['github.com', 'www.github.com']
+                and len(parts) >= 2
+                and not parsed.query
+                and not parsed.fragment
+            )
         except Exception:
             return False
     
@@ -38,8 +45,9 @@ class GitHubRepoScanner:
         try:
             # Clone the repository
             result = subprocess.run([
-                'git', 'clone', repo_url, temp_dir
-            ], capture_output=True, text=True, check=True)
+                'git', 'clone', '--depth', '1', '--', repo_url, temp_dir
+            ], capture_output=True, text=True, check=True, timeout=300,
+               env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
             
             return temp_dir
         except subprocess.CalledProcessError as e:

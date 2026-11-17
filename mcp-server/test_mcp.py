@@ -9,9 +9,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from database import SessionLocal, Base, engine
 from models.rule import LocalRule
-from models.subscription import LocalSubscription
 from services.enforcer import Enforcer
-from services.subscription import LocalSubscriptionManager
 from services.infra_detector import InfrastructureDetector
 
 # Create tables
@@ -24,10 +22,6 @@ def test_enforcer():
     print("="*60)
     
     db = SessionLocal()
-    
-    # Create test subscription
-    sub_manager = LocalSubscriptionManager(db)
-    sub_manager.activate("test_token_12345", "test_user")
     
     # Add test rule
     test_rule = LocalRule(
@@ -80,7 +74,7 @@ response = requests.get("https://api.example.com", headers={"Authorization": API
     
     print("\n[TEST 1] Bad code (should be BLOCKED):")
     print("-" * 60)
-    result = enforcer.enforce(bad_code, rules, sub_manager.get_subscription())
+    result = enforcer.enforce(bad_code, rules)
     print(f"Blocked: {result.get('blocked')}")
     print(f"Violations: {result.get('violation_count', 0)}")
     if result.get('violations'):
@@ -88,7 +82,7 @@ response = requests.get("https://api.example.com", headers={"Authorization": API
     
     print("\n[TEST 2] Good code (should PASS):")
     print("-" * 60)
-    result = enforcer.enforce(good_code, rules, sub_manager.get_subscription())
+    result = enforcer.enforce(good_code, rules)
     print(f"Blocked: {result.get('blocked')}")
     print(f"Compliant: {result.get('compliant')}")
     

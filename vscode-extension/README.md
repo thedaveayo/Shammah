@@ -13,14 +13,14 @@ The Security MCP extension brings real-time security enforcement to your VS Code
 ## Requirements
 
 - Security MCP backend server running
-- Valid API token for authentication
+- No account or token needed; Shammah is free and open source
 
 ## Extension Settings
 
 This extension contributes the following settings:
 
 - `security-mcp.backendUrl`: URL of the Security MCP backend server (default: http://localhost:8000)
-- `security-mcp.apiToken`: API token for authenticating with the Security MCP backend
+- `security-mcp.apiToken`: optional token, only needed if you put your backend behind an authenticating proxy
 - `security-mcp.enableRealtimeScanning`: Enable real-time scanning of code as you type (default: true)
 
 ## Commands

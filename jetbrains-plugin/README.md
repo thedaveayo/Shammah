@@ -13,13 +13,13 @@ The Security MCP JetBrains plugin brings real-time security enforcement to your 
 ## Requirements
 
 - Security MCP backend server running
-- Valid API token for authentication
+- No account or token needed; Shammah is free and open source
 
 ## Installation
 
 1. Build the plugin using Gradle: `./gradlew buildPlugin`
 2. Install the plugin in your JetBrains IDE from disk
-3. Configure the backend URL and API token in the plugin settings
+3. Configure the backend URL in the plugin settings
 
 ## Commands
 

@@ -18,7 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import necessary modules
 from services.security_scanner import SecurityScanner
-from services.subscription_validator import SubscriptionValidator
 from services.code_change_tracker import CodeChangeTracker
 
 # Set up logging
@@ -31,7 +30,6 @@ class SecurityMCPServer:
     def __init__(self):
         self.server = Server()
         self.scanner = SecurityScanner()
-        self.validator = SubscriptionValidator()
         self.tracker = CodeChangeTracker()
         
         # Register all MCP tools
@@ -102,14 +100,6 @@ class SecurityMCPServer:
                         },
                         "required": ["code_block"]
                     }
-                ),
-                Tool(
-                    name="validate_subscription",
-                    description="Validate the current subscription status",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {}
-                    }
                 )
             ]
         
@@ -124,8 +114,6 @@ class SecurityMCPServer:
                 return await self._get_security_report(arguments)
             elif name == "get_fix_suggestions":
                 return await self._get_fix_suggestions(arguments)
-            elif name == "validate_subscription":
-                return await self._validate_subscription(arguments)
             else:
                 raise ValueError(f"Unknown tool: {name}")
     
@@ -137,11 +125,6 @@ class SecurityMCPServer:
         
         if not code_block:
             return [TextContent(type="text", text="Error: No code block provided")]
-        
-        # Validate subscription
-        is_valid = await self.validator.is_subscription_valid()
-        if not is_valid:
-            return [TextContent(type="text", text="Error: Invalid or expired subscription")]
         
         # Perform security scan
         scan_results = self.scanner.scan_code_block(code_block, language, context)
@@ -168,11 +151,6 @@ class SecurityMCPServer:
         project_path = arguments.get("project_path", "")
         report_type = arguments.get("report_type", "summary")
         
-        # Validate subscription
-        is_valid = await self.validator.is_subscription_valid()
-        if not is_valid:
-            return [TextContent(type="text", text="Error: Invalid or expired subscription")]
-        
         # Generate report
         report = self.scanner.generate_project_report(project_path, report_type)
         
@@ -186,11 +164,6 @@ class SecurityMCPServer:
         if not code_block:
             return [TextContent(type="text", text="Error: No code block provided")]
         
-        # Validate subscription
-        is_valid = await self.validator.is_subscription_valid()
-        if not is_valid:
-            return [TextContent(type="text", text="Error: Invalid or expired subscription")]
-        
         # Get fix suggestions
         suggestions = self.scanner.get_fix_suggestions(code_block, vulnerability_types)
         
@@ -202,17 +175,6 @@ class SecurityMCPServer:
                 result_text += f"{i}. {suggestion['title']}:\n"
                 result_text += f"   - Issue: {suggestion['issue']}\n"
                 result_text += f"   - Fix: {suggestion['fix']}\n\n"
-        
-        return [TextContent(type="text", text=result_text)]
-    
-    async def _validate_subscription(self, arguments: dict):
-        """Validate the current subscription status"""
-        is_valid, status_info = await self.validator.validate_subscription()
-        
-        if is_valid:
-            result_text = f"✓ Subscription is active. Expires in {status_info.get('days_until_expiry', 'N/A')} days."
-        else:
-            result_text = f"✗ Subscription issue: {status_info.get('message', 'Invalid subscription')}"
         
         return [TextContent(type="text", text=result_text)]
     

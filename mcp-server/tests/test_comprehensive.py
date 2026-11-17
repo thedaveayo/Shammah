@@ -14,11 +14,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'mcp-server'))
 from services.pattern_matcher import PatternMatcher
 from services.hybrid_pattern_matcher import HybridPatternMatcher
 from services.enforcer import Enforcer
-from services.subscription import LocalSubscriptionManager
 from services.infra_detector import InfrastructureDetector
 from services.rule_sync import RuleSync
 from models.rule import LocalRule
-from models.subscription import LocalSubscription
 
 
 class TestPatternMatcher:
@@ -109,11 +107,11 @@ class TestEnforcer:
         code = "var x = 5;"
         rules = []  # No rules to violate
         
-        result = enforcer.enforce(code, rules, None)
-        
-        # Should return empty violations list
-        assert result["violations"] == []
-        assert result["allowed"] == True
+        result = enforcer.enforce(code, rules)
+
+        # Nothing to violate: not blocked and compliant
+        assert result["blocked"] is False
+        assert result["compliant"] is True
     
     def test_enforce_with_violations(self):
         """Test enforcement with violations"""
@@ -125,40 +123,35 @@ class TestEnforcer:
                 self.rule_id = "DSV-TEST-001"
                 self.title = "Test Rule"
                 self.severity = "high"
+                self.pattern = {"type": "regex", "value": r"eval\s*\("}
                 self.enforcement = {"level": "block", "message": "Test violation"}
         
         code = "eval('some code');"
         rules = [MockRule()]
         
-        # Mock subscription to allow enforcement
-        mock_subscription = Mock()
-        mock_subscription.is_valid.return_value = True
-        
-        result = enforcer.enforce(code, rules, mock_subscription)
+        result = enforcer.enforce(code, rules)
         
         # Should detect violation and block
         assert len(result["violations"]) > 0
-        assert result["allowed"] == False
+        assert result["blocked"] is True
         assert result["violations"][0]["rule_id"] == "DSV-TEST-001"
 
+    def test_low_severity_only_warns(self):
+        """Low severity findings warn but never block"""
+        enforcer = Enforcer()
 
-class TestLocalSubscriptionManager:
-    """Test Local Subscription Manager functionality"""
-    
-    def test_get_subscription(self):
-        """Test getting local subscription"""
-        # Mock database session
-        mock_db = Mock()
-        mock_subscription = Mock()
-        mock_subscription.is_valid.return_value = True
-        mock_subscription.is_in_grace_period.return_value = False
-        mock_db.query().first.return_value = mock_subscription
-        
-        manager = LocalSubscriptionManager(lambda: [mock_db])
-        subscription = manager.get_subscription()
-        
-        assert subscription is not None
-        assert subscription.is_valid() == True
+        class LowRule:
+            rule_id = "DSV-TEST-002"
+            rule_type = "cwe"
+            title = "Console logging"
+            severity = "low"
+            pattern = {"type": "regex", "value": r"console\.log"}
+            enforcement = {"message": "Avoid logging in production"}
+
+        result = enforcer.enforce("console.log('x')", [LowRule()])
+
+        assert result["blocked"] is False
+        assert result["violation_count"] == 1
 
 
 class TestInfrastructureDetector:
@@ -213,17 +206,6 @@ class TestRuleSync:
         assert sync.db == mock_db
         assert sync.rule_checksums == {}
     
-    def test_get_subscription(self):
-        """Test getting subscription from RuleSync"""
-        mock_db = Mock()
-        mock_subscription = Mock()
-        mock_db.query().first.return_value = mock_subscription
-        
-        sync = RuleSync(mock_db)
-        subscription = sync.get_subscription()
-        
-        assert subscription == mock_subscription
-    
     def test_get_local_rule_checksums(self):
         """Test calculating local rule checksums"""
         mock_db = Mock()
@@ -273,18 +255,6 @@ class TestLocalModels:
         assert rule.severity == "high"
         assert "CWE-79" in rule.cwe_refs
     
-    def test_local_subscription_creation(self):
-        """Test creating a local subscription"""
-        subscription = LocalSubscription(
-            user_id="local-user-123",
-            auth_token="local-jwt-token",
-            is_active=True,
-            expires_at=datetime.utcnow() + timedelta(days=30)
-        )
-        
-        assert subscription.user_id == "local-user-123"
-        assert subscription.is_active == True
-        assert subscription.is_valid() == True
 
 
 # Run tests if this file is executed directly

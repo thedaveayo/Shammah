@@ -3,6 +3,7 @@ Security MCP Backend - FastAPI Application
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from config import CORS_ORIGINS, HOST, PORT
 from database import engine, Base, SessionLocal
 from api.routes import router
 import schedule
@@ -13,7 +14,7 @@ from threading import Thread
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="Security MCP Backend",
+    title="Shammah Backend",
     description="Security Agent - Processes CVE/CWE/Telegram → generates enforcement rules",
     version="1.0.0"
 )
@@ -21,10 +22,10 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Include API routes
@@ -33,7 +34,7 @@ app.include_router(router, prefix="/api")
 @app.get("/")
 def root():
     return {
-        "name": "Security MCP Backend",
+        "name": "Shammah Backend",
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs",
@@ -74,4 +75,4 @@ scheduler_thread.start()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=HOST, port=PORT)

@@ -4,7 +4,7 @@
 
 - Python 3.11+
 - NVD API Key (free from https://nvd.nist.gov/developers/request-an-api-key)
-- Anthropic API Key (https://console.anthropic.com/)
+- An OpenAI-compatible LLM API key (default config uses Alibaba Qwen)
 - Telegram Bot Token (optional, from @BotFather)
 
 ---
@@ -37,10 +37,15 @@
    ```
    DATABASE_URL=postgresql://...  # Railway auto-provides
    NVD_API_KEY=your_nvd_key
-   ANTHROPIC_API_KEY=your_anthropic_key
+   QWEN_API_KEY=your_llm_key
+   QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
    TELEGRAM_BOT_TOKEN=your_bot_token
-   JWT_SECRET_KEY=<generate-random-string>
+   ADMIN_API_KEY=<long random string>
+   HOST=0.0.0.0
+   CORS_ORIGINS=https://your-frontend.example.com
    ```
+
+   Generate the admin key with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
 5. **Deploy**
    Railway auto-deploys on push
@@ -146,13 +151,7 @@
    # Edit BACKEND_URL to point to your backend
    ```
 
-4. **Activate Subscription**
-   ```bash
-   # Get auth token from backend after subscribing
-   python -c "from services.subscription import LocalSubscriptionManager; from database import SessionLocal; db = SessionLocal(); mgr = LocalSubscriptionManager(db); mgr.activate('your_auth_token', 'user123')"
-   ```
-
-5. **Configure IDE**
+4. **Configure IDE**
    
    **Cursor:**
    Add to `.cursor/mcp.json`:
@@ -186,10 +185,12 @@
 
 ## Initial Setup
 
+These routes need `ADMIN_API_KEY` set on the backend. Without it they return 503.
+
 ### 1. Fetch CWE Taxonomy (One-time)
 ```bash
 curl -X POST http://localhost:8000/api/fetch/cwe \
-  -H "Authorization: Bearer <admin_token>"
+  -H "Authorization: Bearer $ADMIN_API_KEY"
 ```
 
 This downloads 600+ CWE entries and converts them to rules (~30 minutes).
@@ -197,12 +198,13 @@ This downloads 600+ CWE entries and converts them to rules (~30 minutes).
 ### 2. Fetch Recent CVEs
 ```bash
 curl -X POST http://localhost:8000/api/fetch/cve \
-  -H "Authorization: Bearer <admin_token>"
+  -H "Authorization: Bearer $ADMIN_API_KEY"
 ```
 
 ### 3. Test Telegram Ingestion
 ```bash
 curl -X POST http://localhost:8000/api/rules/telegram \
+  -H "Authorization: Bearer $ADMIN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "message_text": "New auth bypass in Express.js\nseverity: high\nhttps://example.com/article"
@@ -267,6 +269,6 @@ curl http://localhost:8000/api/public/rules > rules-backup.json
 - Restart IDE
 
 ### Rules not syncing
-- Verify subscription is active
 - Check BACKEND_URL in MCP config
-- Look for auth errors in logs
+- Check the backend has rules: `curl http://localhost:8000/api/stats`
+- Look for errors in the backend logs
