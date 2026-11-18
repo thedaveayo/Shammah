@@ -47,6 +47,23 @@ jobs:
             python -m pytest tests $KNOWN_FAILING_mcp_server
           fi
 
+  action-selftest:
+    # Runs this repository's own GitHub Action against the repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        id: shammah
+        with:
+          fail-on: none
+      - name: Check the action produced results
+        env:
+          SARIF: ${{ steps.shammah.outputs.sarif-file }}
+        run: |
+          test -s "$SARIF"
+          python -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['version']=='2.1.0'" "$SARIF"
+          python mcp-server/main.py test-rules
+
   vscode-extension:
     runs-on: ubuntu-latest
     defaults:

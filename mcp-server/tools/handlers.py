@@ -16,20 +16,17 @@ from sqlalchemy.orm import Session
 from models.rule import LocalRule
 from services.infra_detector import InfrastructureDetector
 from services.rule_store import (
-    SEVERITY_ORDER, find_issues, language_from_path, normalize_language, rules_for_language,
+    find_issues, language_from_path, normalize_language, rules_for_language,
 )
+from services.feed_client import FeedClient
+from services.project_config import load_config, mute_rule as _mute_rule
+from services.project_scan import format_text, scan_project
 from services.rule_sync import RuleSync
 
 Result = Tuple[str, Dict]
 
 BLOCKING = {"critical", "high", "medium"}
 MAX_FILE_BYTES = 2 * 1024 * 1024
-SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "env", "dist", "build", ".next", "target", "vendor"}
-CODE_LANGUAGES = {"javascript", "python", "java", "kotlin", "go", "php", "ruby", "csharp", "rust", "sql"}
-SOURCE_EXTENSIONS = {
-    ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".py", ".java", ".kt", ".go", ".php", ".rb", ".cs", ".rs", ".sql",
-    ".env", ".json", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".properties",
-}
 
 
 def _short(text: str, limit: int = 100) -> str:
@@ -160,6 +157,18 @@ def _read_source(path: str) -> Tuple[Optional[str], Optional[str]]:
         return None, f"Could not read {path}: {e}"
 
 
+def _project_root(path: str) -> Optional[str]:
+    """Nearest folder above a file that has a .shammah or .git folder"""
+    current = os.path.dirname(os.path.abspath(path))
+    while True:
+        if os.path.isdir(os.path.join(current, ".shammah")) or os.path.isdir(os.path.join(current, ".git")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
 def security_scan_file(db: Session, file_path: str, include_details: bool = True,
                        language: Optional[str] = None) -> Result:
     """Scan one file on disk"""
@@ -167,7 +176,9 @@ def security_scan_file(db: Session, file_path: str, include_details: bool = True
     if error:
         return f"Error: {error}", {"error": error}
     lang = normalize_language(language) or language_from_path(file_path)
-    findings = find_issues(code, rules_for_language(db, lang))
+    root = _project_root(file_path)
+    muted = set(load_config(root)["muted_rules"]) if root else set()
+    findings = find_issues(code, [r for r in rules_for_language(db, lang) if r.rule_id not in muted])
     data = {"file_path": file_path, "language": lang, "counts": _counts(findings), "violations": findings}
     if not findings:
         return f"No security issues found in {file_path}.", data
@@ -177,58 +188,56 @@ def security_scan_file(db: Session, file_path: str, include_details: bool = True
     return f"{len(findings)} issue(s) in {file_path}:\n{summary}", data
 
 
-def security_scan_project(db: Session, project_path: str = ".", max_files: int = 2000) -> Result:
-    """Scan every source file under a folder"""
+def security_scan_project(db: Session, project_path: str = ".", max_files: int = 5000,
+                          include_dependencies: bool = True) -> Result:
+    """Scan every source/config file and every lockfile under a folder (results are cached per file)"""
     if not os.path.isdir(project_path):
         return f"Error: folder does not exist: {project_path}", {"error": "folder does not exist"}
+    result = scan_project(db, project_path, max_files=max_files, include_dependencies=include_dependencies)
+    return format_text(result), result
 
-    rules_cache: Dict[str, List] = {}
-    findings: List[Dict] = []
-    files_scanned = 0
-    truncated = False
 
-    for root, dirs, files in os.walk(project_path):
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith(".") or d == ".github")
-        for name in sorted(files):
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in SOURCE_EXTENSIONS and name != ".env":
-                continue
-            if files_scanned >= max_files:
-                truncated = True
-                break
-            path = os.path.join(root, name)
-            code, error = _read_source(path)
-            if error:
-                continue
-            files_scanned += 1
-            lang = language_from_path(name)
-            if lang not in CODE_LANGUAGES:
-                lang = "config"  # config files only get language-independent rules (e.g. secrets)
-            if lang not in rules_cache:
-                rules_cache[lang] = rules_for_language(db, lang)
-            for f in find_issues(code, rules_cache[lang]):
-                f["file_path"] = os.path.relpath(path, project_path)
-                findings.append(f)
-        if truncated:
-            break
+def security_check_dependencies(db: Session, project_path: str = ".") -> Result:
+    """Check the project's lockfiles for packages with known vulnerabilities (OSV.dev)"""
+    from services.dependency_check import check_dependencies
+    if not os.path.isdir(project_path):
+        return f"Error: folder does not exist: {project_path}", {"error": "folder does not exist"}
+    muted = load_config(project_path)["muted_rules"]
+    data = check_dependencies(project_path, muted=muted)
+    if data["error"]:
+        return data["error"], data
+    if not data["lockfiles"]:
+        return "No lockfiles found (package-lock.json, yarn.lock, requirements.txt, poetry.lock, Pipfile.lock, Cargo.lock, Gemfile.lock, go.mod).", data
+    if not data["violations"]:
+        return f"Checked {data['packages']} dependencies in {', '.join(data['lockfiles'])}: no known vulnerabilities.", data
+    return (f"{len(data['violations'])} known vulnerabilit{'y' if len(data['violations']) == 1 else 'ies'} "
+            f"in {data['packages']} dependencies:\n\n" + _format_findings(data["violations"])), data
 
-    findings.sort(key=lambda f: (SEVERITY_ORDER.get(f["severity"], 9), f["file_path"], f["line"]))
-    counts = _counts(findings)
-    data = {"project_path": project_path, "files_scanned": files_scanned, "truncated": truncated,
-            "issues_found": len(findings), "counts": counts, "violations": findings}
 
-    head = (f"Scanned {files_scanned} file(s) in {project_path}{' (stopped at the file limit)' if truncated else ''}. "
-            f"Found {len(findings)} issue(s): {counts['critical']} critical, {counts['high']} high, "
-            f"{counts['medium']} medium, {counts['low']} low.")
-    if not findings:
-        return head, data
-    top = findings[:25]
-    lines = [head, "", "Most severe issues:"]
-    for f in top:
-        lines.append(f"- [{f['severity'].upper()}] {f['title']} ({f['rule_id']}) at {f['file_path']}:{f['line']}")
-    if len(findings) > len(top):
-        lines.append(f"...and {len(findings) - len(top)} more.")
-    return "\n".join(lines), data
+def mute_rule(db: Session, project_path: str, rule_id: str, unmute: bool = False) -> Result:
+    """Turn a rule off (or back on) for one project, saved in .shammah/config.json"""
+    if not os.path.isdir(project_path):
+        return f"Error: folder does not exist: {project_path}", {"error": "folder does not exist"}
+    muted = _mute_rule(project_path, rule_id, unmute=unmute)
+    verb = "Unmuted" if unmute else "Muted"
+    return f"{verb} {rule_id} for {project_path}. Muted rules: {', '.join(muted) or 'none'}.", {"muted_rules": muted}
+
+
+def report_false_positive(db: Session, rule_id: str, reason: str, project_path: Optional[str] = None) -> Result:
+    """Report a wrong finding. Mutes the rule for the project if a path is given; tells Shammah Pro if configured."""
+    parts, data = [], {"rule_id": rule_id}
+    if project_path and os.path.isdir(project_path):
+        data["muted_rules"] = _mute_rule(project_path, rule_id)
+        parts.append(f"Muted {rule_id} for this project.")
+    sent = FeedClient().report_false_positive(rule_id, reason or "")
+    data["reported"] = sent["status"] == "success"
+    if sent["status"] == "success":
+        parts.append("Reported to Shammah so the rule can be fixed.")
+    elif sent["status"] == "disabled":
+        parts.append("To help fix the rule, open an issue: https://github.com/thedaveayo/Shammah/issues/new?template=rule_request.md")
+    else:
+        parts.append(sent.get("message", "Could not send the report."))
+    return " ".join(parts), data
 
 
 # --------------------------------------------------------------------------- rules and project
@@ -293,13 +302,28 @@ def get_compliance_status(db: Session, project_path: str = ".") -> Result:
 
 
 def sync_rules(db: Session, full: bool = False) -> Result:
-    """Pull new rules from the backend"""
+    """Pull new rules from the backend in BACKEND_URL and, if configured, the Shammah Pro feed"""
+    lines, data = [], {}
+    feed = FeedClient()
+    if feed.enabled:
+        res = feed.sync(db, full=full)
+        data["feed"] = res
+        lines.append(res["message"] if res["status"] != "success" else
+                     f"Shammah Pro feed: {res['rules_received']} rule(s) ({res['created']} new, {res['updated']} updated).")
     result = RuleSync(db).sync_rules(full=full)
+    data.update(result)
     if result["status"] != "success":
-        return result["message"].rstrip(".") + ". The server keeps working with the rules it already has.", result
-    return (f"Synced {result['rules_received']} rule(s) from the backend "
-            f"({result['created']} new, {result['updated']} updated). "
-            f"{result['total_rules']} rules loaded."), result
+        if not feed.enabled:
+            return result["message"].rstrip(".") + ". The server keeps working with the rules it already has.", data
+        lines.append("Backend: " + result["message"])
+    else:
+        lines.append(f"Backend: {result['rules_received']} rule(s) ({result['created']} new, {result['updated']} updated).")
+    total = db.query(LocalRule).count()
+    data["total_rules"] = total
+    ok = result["status"] == "success" or (feed.enabled and data["feed"]["status"] == "success")
+    data["status"] = "success" if ok else "error"
+    lines.append(f"{total} rules loaded.")
+    return " ".join(lines), data
 
 
 HANDLERS = {
@@ -312,4 +336,7 @@ HANDLERS = {
     "get_compliance_status": get_compliance_status,
     "get_infrastructure_profile": get_infrastructure_profile,
     "sync_rules": sync_rules,
+    "security_check_dependencies": security_check_dependencies,
+    "mute_rule": mute_rule,
+    "report_false_positive": report_false_positive,
 }

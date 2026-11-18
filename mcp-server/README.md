@@ -27,17 +27,22 @@ Rules are stored in `mcp_local.db` next to `main.py`.
 
 ## Tools
 
-`enforce_security`, `security_scan_file`, `security_scan_project`, `security_fix_suggestions`, `security_context_explain`, `security_rule_details`, `get_compliance_status`, `get_infrastructure_profile`, `sync_rules`. See [../docs/mcp-tools.md](../docs/mcp-tools.md).
+`enforce_security`, `security_scan_file`, `security_scan_project`, `security_fix_suggestions`, `security_context_explain`, `security_rule_details`, `get_compliance_status`, `get_infrastructure_profile`, `security_check_dependencies`, `mute_rule`, `report_false_positive`, `sync_rules`. See [../docs/mcp-tools.md](../docs/mcp-tools.md).
 
 ## Modes
 
 ```bash
-python main.py                 # MCP over stdio (what agents run)
-python main.py --bridge        # local HTTP bridge for IDE extensions (127.0.0.1:8765)
-python main.py --check FILE    # scan one file; exit code 1 if anything blocks
-python main.py --sync          # sync rules from the backend once
-python main.py --no-sync       # MCP over stdio without syncing on start
+python main.py                      # MCP over stdio (what agents run)
+python main.py init [PROJECT]       # connect your agents: MCP config, instructions, hook
+python main.py scan [PROJECT]       # code + dependencies, cached; --format sarif for GitHub
+python main.py check FILE           # scan one file; exit code 1 if anything blocks
+python main.py hook                 # agent hook (Claude Code PostToolUse)
+python main.py bridge               # local HTTP bridge for IDE extensions (127.0.0.1:8765)
+python main.py sync                 # pull new rules (backend and/or Shammah Pro feed)
+python main.py test-rules           # check every rule against its examples
 ```
+
+For CI, `requirements-scan.txt` installs just what `scan` and `check` need (no MCP library).
 
 ## Configuration
 
@@ -50,6 +55,10 @@ AUTO_SYNC_ON_START=true
 BRIDGE_HOST=127.0.0.1
 BRIDGE_PORT=8765
 LOG_LEVEL=INFO
+
+# Shammah Pro (optional)
+SHAMMAH_API_KEY=
+SHAMMAH_FEED_URL=
 ```
 
 Logs go to stderr, because stdout carries the MCP protocol.

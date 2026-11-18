@@ -29,6 +29,7 @@ class RuleSync:
         return (
             self.db.query(func.max(LocalRule.synced_at))
             .filter(LocalRule.source != "shammah-starter")
+            .filter(~LocalRule.source.like("feed:%"))
             .scalar()
         )
 

@@ -16,6 +16,10 @@ load_dotenv(MCP_DIR / ".env")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 SYNC_TIMEOUT_SECONDS = float(os.getenv("SYNC_TIMEOUT_SECONDS", "10"))
 
+# Shammah Pro: hosted rule feed (both must be set to use it)
+SHAMMAH_API_KEY = os.getenv("SHAMMAH_API_KEY", "")
+SHAMMAH_FEED_URL = os.getenv("SHAMMAH_FEED_URL", "").rstrip("/")
+
 # Local Database
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{(MCP_DIR / 'mcp_local.db').as_posix()}")
 

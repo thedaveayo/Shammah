@@ -1,0 +1,29 @@
+# Copy to .github/workflows/shammah.yml in your repository.
+# Scans on every push to main, on every pull request, and every day at 06:00 UTC.
+name: Shammah security scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   # only needed for upload-sarif
+
+jobs:
+  shammah:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: thedaveayo/Shammah@main
+        with:
+          fail-on: high
+          upload-sarif: "true"
+          # Shammah Pro (optional): full rule feed and dashboard history
+          # api-key: ${{ secrets.SHAMMAH_API_KEY }}
+          # feed-url: ${{ vars.SHAMMAH_FEED_URL }}
+          # report: "true"
