@@ -310,9 +310,17 @@ def sync_rules(db: Session, full: bool = False) -> Result:
         data["feed"] = res
         lines.append(res["message"] if res["status"] != "success" else
                      f"Shammah Pro feed: {res['rules_received']} rule(s) ({res['created']} new, {res['updated']} updated).")
-    result = RuleSync(db).sync_rules(full=full)
+    sync = RuleSync(db)
+    if not sync.backend_url:
+        result = {"status": "skipped", "message": "no BACKEND_URL set"}
+        if not feed.enabled:
+            return "Nothing to sync from: set BACKEND_URL or SHAMMAH_API_KEY and SHAMMAH_FEED_URL.", result
+    else:
+        result = sync.sync_rules(full=full)
     data.update(result)
-    if result["status"] != "success":
+    if result["status"] == "skipped":
+        pass
+    elif result["status"] != "success":
         if not feed.enabled:
             return result["message"].rstrip(".") + ". The server keeps working with the rules it already has.", data
         lines.append("Backend: " + result["message"])

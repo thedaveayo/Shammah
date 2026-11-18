@@ -58,14 +58,29 @@ class FeedClient:
         except ValueError:
             return {"status": "error", "message": "The Shammah feed sent an invalid response."}
 
+        builtin = {rid for (rid,) in db.query(LocalRule.rule_id).filter(LocalRule.source == "shammah-starter").all()}
         rules = []
         for r in data.get("rules") or []:
+            if r.get("rule_id") in builtin:
+                continue  # starter rules ship with the scanner; keep the built-in copy
             r = dict(r)
             r["source"] = FEED_SOURCE_PREFIX + (r.get("source") or "shammah")
             rules.append(r)
         created, updated = upsert_rules(db, rules)
+
+        # Drop feed rules the service has retired (incremental sync) or no longer serves (full sync)
+        feed_rules = db.query(LocalRule).filter(LocalRule.source.like(FEED_SOURCE_PREFIX + "%"))
+        if last:
+            retired = set(data.get("retired_rule_ids") or [])
+            stale = [r for r in feed_rules.all() if r.rule_id in retired]
+        else:
+            served = {r.get("rule_id") for r in data.get("rules") or []}
+            stale = [r for r in feed_rules.all() if r.rule_id not in served]
+        for r in stale:
+            db.delete(r)
+        db.commit()
         return {"status": "success", "rules_received": len(rules), "created": created, "updated": updated,
-                "ruleset_version": data.get("ruleset_version")}
+                "removed": len(stale), "ruleset_version": data.get("ruleset_version")}
 
     def report_scan(self, summary: Dict) -> Dict:
         """Send a scan summary (no code) for the dashboard history"""

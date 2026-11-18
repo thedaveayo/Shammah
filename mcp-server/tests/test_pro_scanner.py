@@ -318,6 +318,31 @@ def test_feed_sync_and_reporting(db):
     assert FeedClient(api_key="", url="").sync(db)["status"] == "disabled"
 
 
+def test_feed_removes_retired_rules(db):
+    def response(body):
+        resp = Mock(status_code=200)
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = body
+        return resp
+
+    def rule(rid):
+        return {"rule_id": rid, "severity": "high", "title": rid, "description": "d",
+                "pattern": {"type": "regex", "value": rid, "language": "any"},
+                "enforcement": {"message": "m", "required_actions": ["a"]}}
+
+    http = Mock()
+    client = FeedClient(api_key="k", url="https://feed.example", session=http)
+    http.get.return_value = response({"rules": [rule("FEED-A"), rule("FEED-B")]})
+    client.sync(db)
+    http.get.return_value = response({"rules": [], "retired_rule_ids": ["FEED-A"]})
+    assert client.sync(db)["removed"] == 1  # incremental: retired rule dropped
+    http.get.return_value = response({"rules": [rule("FEED-C")]})
+    assert client.sync(db, full=True)["removed"] == 1  # full: FEED-B no longer served
+    feed_ids = {r.rule_id for r in db.query(LocalRule).filter(LocalRule.source.like("feed:%")).all()}
+    assert feed_ids == {"FEED-C"}
+    assert db.query(LocalRule).filter_by(source="shammah-starter").count() == 21  # starter rules untouched
+
+
 def test_scan_summary_contains_no_code(db, tmp_path):
     (tmp_path / "a.py").write_text('API_KEY = "supersecretvalue123"\n', encoding="utf-8")
     result = scan_project(db, str(tmp_path), include_dependencies=False)
