@@ -11,7 +11,10 @@ from typing import Dict, List, Optional
 from urllib.parse import urlparse
 import json
 from datetime import datetime
+import logging
 from services.security_scanner import SecurityScanner
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubRepoScanner:
@@ -99,7 +102,7 @@ class GitHubRepoScanner:
                         
                         results['files_scanned'] += 1
                     except Exception as e:
-                        print(f"Error scanning file {file_path}: {e}")
+                        logger.warning(f"Error scanning file {file_path}: {e}")
         
         return results
     
@@ -171,11 +174,11 @@ class GitHubRepoScanner:
         if not self._validate_github_url(repo_url):
             raise ValueError(f"Invalid GitHub URL: {repo_url}")
         
-        print(f"Starting scan of repository: {repo_url}")
+        logger.info(f"Starting scan of repository: {repo_url}")
         
         # Clone the repository
         repo_dir = self._clone_repository(repo_url)
-        print(f"Repository cloned to: {repo_dir}")
+        logger.info(f"Repository cloned to: {repo_dir}")
         
         # Scan the repository
         results = self._scan_directory(repo_dir)
@@ -185,9 +188,9 @@ class GitHubRepoScanner:
             shutil.rmtree(repo_dir)
             self.temp_dirs.remove(repo_dir)
         except Exception as e:
-            print(f"Warning: Could not remove temporary directory {repo_dir}: {e}")
+            logger.warning(f"Warning: Could not remove temporary directory {repo_dir}: {e}")
         
-        print(f"Scan completed. Files scanned: {results['files_scanned']}, Issues found: {results['issues_found']}")
+        logger.info(f"Scan completed. Files scanned: {results['files_scanned']}, Issues found: {results['issues_found']}")
         
         return results
     
@@ -197,7 +200,7 @@ class GitHubRepoScanner:
             try:
                 shutil.rmtree(temp_dir)
             except Exception as e:
-                print(f"Warning: Could not remove temporary directory {temp_dir}: {e}")
+                logger.warning(f"Warning: Could not remove temporary directory {temp_dir}: {e}")
         
         self.temp_dirs.clear()
 

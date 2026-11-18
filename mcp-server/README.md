@@ -1,64 +1,70 @@
 # Shammah MCP Server
 
-Model Context Protocol (MCP) server for coding agents. It checks code as it is written against Shammah's security rules.
-
-## Architecture
-
-- **MCP server** (this folder): runs locally and talks to coding agents over MCP.
-- **Backend** (`../backend`): builds the rules from CVE/CWE data. Run your own and point `BACKEND_URL` at it.
-- **Coding agent**: any MCP-capable assistant or IDE.
+Model Context Protocol (MCP) server that lets coding agents check code for security problems before they write it.
 
 ## Quick start
 
 ```bash
 cd mcp-server
 pip install -r requirements.txt
-cp .env.example .env    # set BACKEND_URL
-python main.py
+python main.py --check path/to/file.py   # try it
 ```
 
-Then register the server with your coding agent. See [../docs/mcp-tools.md](../docs/mcp-tools.md).
+Register it with your agent using the absolute path to `main.py`, for example in Claude Code:
+
+```bash
+claude mcp add shammah -- python /path/to/Shammah/mcp-server/main.py
+```
+
+Cursor and VS Code examples are in [../docs/mcp-tools.md](../docs/mcp-tools.md).
+
+## Rules
+
+- **Starter rules** (`rules/starter_rules.json`): 21 hand-checked rules for JavaScript/TypeScript, Python, Java and any language (leaked secrets). Loaded on every start, so the server works offline.
+- **Backend rules**: if you run the Shammah backend, the server downloads its rules from `BACKEND_URL` on start (`AUTO_SYNC_ON_START`) or with the `sync_rules` tool.
+
+Rules are stored in `mcp_local.db` next to `main.py`.
 
 ## Tools
 
-- `scan_code_block`: scan a code block for vulnerabilities after it is generated
-- `get_security_report`: summary, detailed or fixes report for a project
-- `get_fix_suggestions`: fix suggestions for identified issues
+`enforce_security`, `security_scan_file`, `security_scan_project`, `security_fix_suggestions`, `security_context_explain`, `security_rule_details`, `get_compliance_status`, `get_infrastructure_profile`, `sync_rules`. See [../docs/mcp-tools.md](../docs/mcp-tools.md).
 
-## How it works
+## Modes
 
-1. The agent writes code.
-2. The agent calls a Shammah tool with that code.
-3. Shammah matches it against local rules.
-4. Issues and suggested fixes go back to the agent.
-
-## Supported languages
-
-JavaScript/TypeScript, Python, Java, Go, PHP, Ruby and C#.
+```bash
+python main.py                 # MCP over stdio (what agents run)
+python main.py --bridge        # local HTTP bridge for IDE extensions (127.0.0.1:8765)
+python main.py --check FILE    # scan one file; exit code 1 if anything blocks
+python main.py --sync          # sync rules from the backend once
+python main.py --no-sync       # MCP over stdio without syncing on start
+```
 
 ## Configuration
 
-Set in `.env`:
+Optional settings in `mcp-server/.env` (see `.env.example`):
 
 ```
 BACKEND_URL=http://localhost:8000
-DATABASE_URL=sqlite:///./mcp_local.db
-SYNC_INTERVAL_HOURS=24
+SYNC_TIMEOUT_SECONDS=10
 AUTO_SYNC_ON_START=true
+BRIDGE_HOST=127.0.0.1
+BRIDGE_PORT=8765
+LOG_LEVEL=INFO
 ```
 
-## Troubleshooting
+Logs go to stderr, because stdout carries the MCP protocol.
 
-**Connection refused**
-- Make sure the server is running and your agent points at it.
+## Tests
 
-**No security issues detected**
-- Check that the backend has rules: `curl http://localhost:8000/api/stats`.
-- Check that `BACKEND_URL` is correct.
+```bash
+python -m pytest tests
+```
+
+`tests/test_server.py` includes an end-to-end test that starts `main.py` and drives it with a real MCP client.
 
 ## Privacy
 
-Code is analyzed locally. The MCP server only contacts the backend to download rules.
+Code is checked locally. The server only contacts the backend in `BACKEND_URL` to download rules; it never sends your code anywhere.
 
 ## License
 

@@ -1,0 +1,648 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "rule_id": "SHAMMAH-0001",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "Hardcoded secret",
+      "description": "A password or secret is written directly in the code. Anyone who can read the code can steal it.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-798"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|client[_-]?secret)\\w*[\"']?\\s*[:=]\\s*[\"'][^\"'\\s]{8,}[\"']",
+        "language": "any"
+      },
+      "applies_to": {
+        "languages": []
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/798.html",
+      "enforcement": {
+        "level": "block",
+        "message": "A password or secret is written directly in the code. Anyone who can read the code can steal it.",
+        "required_actions": [
+          "Load the value from an environment variable or a secrets manager",
+          "Rotate the secret if this code was ever shared or committed"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0002",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "critical",
+      "title": "Cloud or service key in code",
+      "description": "A real-looking cloud, payment or service key is in the code. Leaked keys are found and abused within minutes.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-798"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "(?:AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36}|sk_live_[0-9a-zA-Z]{24,}|xox[baprs]-[0-9A-Za-z-]{10,}|-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----)",
+        "language": "any"
+      },
+      "applies_to": {
+        "languages": []
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/798.html",
+      "enforcement": {
+        "level": "block",
+        "message": "A real-looking cloud, payment or service key is in the code. Leaked keys are found and abused within minutes.",
+        "required_actions": [
+          "Remove the key from the code and load it from the environment",
+          "Revoke and rotate the key now"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0003",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "eval() runs arbitrary code",
+      "description": "eval() runs any text as code. If that text can come from a user, they can run their own code in your app.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-95"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\beval\\s*\\(",
+        "language": "javascript"
+      },
+      "applies_to": {
+        "languages": [
+          "javascript"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/95.html",
+      "enforcement": {
+        "level": "block",
+        "message": "eval() runs any text as code. If that text can come from a user, they can run their own code in your app.",
+        "required_actions": [
+          "Use JSON.parse() for data",
+          "Replace dynamic code with explicit logic or a lookup table"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0004",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "Function constructor runs arbitrary code",
+      "description": "new Function() turns text into code, the same risk as eval().",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-95"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\bnew\\s+Function\\s*\\(",
+        "language": "javascript"
+      },
+      "applies_to": {
+        "languages": [
+          "javascript"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/95.html",
+      "enforcement": {
+        "level": "block",
+        "message": "new Function() turns text into code, the same risk as eval().",
+        "required_actions": [
+          "Replace dynamic code with explicit functions"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0005",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "HTML injected into the page (XSS)",
+      "description": "Writing raw HTML into the page lets attackers inject scripts if any part of it comes from users.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-79"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\.(?:innerHTML|outerHTML)\\s*=(?!=)|\\binsertAdjacentHTML\\s*\\(|\\bdocument\\.write(?:ln)?\\s*\\(",
+        "language": "javascript"
+      },
+      "applies_to": {
+        "languages": [
+          "javascript"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/79.html",
+      "enforcement": {
+        "level": "block",
+        "message": "Writing raw HTML into the page lets attackers inject scripts if any part of it comes from users.",
+        "required_actions": [
+          "Use textContent for text",
+          "Sanitize HTML with a library such as DOMPurify before inserting it"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0006",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "medium",
+      "title": "React dangerouslySetInnerHTML",
+      "description": "dangerouslySetInnerHTML skips React's protection against script injection.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-79"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "dangerouslySetInnerHTML",
+        "language": "javascript"
+      },
+      "applies_to": {
+        "languages": [
+          "javascript"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/79.html",
+      "enforcement": {
+        "level": "block",
+        "message": "dangerouslySetInnerHTML skips React's protection against script injection.",
+        "required_actions": [
+          "Render text normally in JSX",
+          "If HTML is required, sanitize it with DOMPurify first"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0007",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "Shell command built from variables (JavaScript)",
+      "description": "The shell command is built from variables. If one comes from a user, they can run their own commands on your server.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-78"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\b(?:exec|execSync)\\s*\\(\\s*(?:`[^`]*\\$\\{|[\"'][^\"'\\n]*[\"']\\s*\\+)",
+        "language": "javascript"
+      },
+      "applies_to": {
+        "languages": [
+          "javascript"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/78.html",
+      "enforcement": {
+        "level": "block",
+        "message": "The shell command is built from variables. If one comes from a user, they can run their own commands on your server.",
+        "required_actions": [
+          "Use execFile/spawn with an argument array instead of a command string",
+          "Validate inputs against an allowlist"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0008",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "critical",
+      "title": "SQL query built from strings (JavaScript)",
+      "description": "The database query is built by joining strings. Attackers can change the query and read or delete your data.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-89"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\.(?:query|execute|raw)\\s*\\(\\s*(?:`[^`]*\\$\\{|[\"'][^\"'\\n]*[\"']\\s*\\+)",
+        "language": "javascript"
+      },
+      "applies_to": {
+        "languages": [
+          "javascript"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/89.html",
+      "enforcement": {
+        "level": "block",
+        "message": "The database query is built by joining strings. Attackers can change the query and read or delete your data.",
+        "required_actions": [
+          "Use parameterized queries (placeholders such as ? or $1)",
+          "Use your ORM's query builder"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0009",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "medium",
+      "title": "TLS certificate checks turned off (JavaScript)",
+      "description": "Certificate checks are disabled, so anyone on the network can intercept this connection.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-295"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "rejectUnauthorized\\s*:\\s*false|NODE_TLS_REJECT_UNAUTHORIZED\\s*=\\s*[\"']?0",
+        "language": "javascript"
+      },
+      "applies_to": {
+        "languages": [
+          "javascript"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/295.html",
+      "enforcement": {
+        "level": "block",
+        "message": "Certificate checks are disabled, so anyone on the network can intercept this connection.",
+        "required_actions": [
+          "Remove the override",
+          "Add the correct CA certificate instead of disabling checks"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0010",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "low",
+      "title": "Weak hash algorithm (JavaScript)",
+      "description": "MD5 and SHA-1 are broken for security use such as passwords or signatures.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-328"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "createHash\\s*\\(\\s*[\"'](?:md5|sha1)[\"']",
+        "language": "javascript"
+      },
+      "applies_to": {
+        "languages": [
+          "javascript"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/328.html",
+      "enforcement": {
+        "level": "warn",
+        "message": "MD5 and SHA-1 are broken for security use such as passwords or signatures.",
+        "required_actions": [
+          "Use SHA-256 or better for integrity",
+          "Use bcrypt, scrypt or Argon2 for passwords"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0011",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "eval() or exec() runs arbitrary code (Python)",
+      "description": "eval()/exec() run any text as Python code. If that text can come from a user, they can take over the program.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-95"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "(?<![\\w.])(?:eval|exec)\\s*\\(",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/95.html",
+      "enforcement": {
+        "level": "block",
+        "message": "eval()/exec() run any text as Python code. If that text can come from a user, they can take over the program.",
+        "required_actions": [
+          "Use ast.literal_eval() for literals or json.loads() for data",
+          "Replace dynamic code with explicit logic"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0012",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "Shell command with shell=True (Python)",
+      "description": "shell=True runs the command through the shell, so special characters in variables can run extra commands.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-78"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\bsubprocess\\.\\w+\\([^)]*shell\\s*=\\s*True",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/78.html",
+      "enforcement": {
+        "level": "block",
+        "message": "shell=True runs the command through the shell, so special characters in variables can run extra commands.",
+        "required_actions": [
+          "Pass the command as a list and drop shell=True",
+          "Validate inputs against an allowlist"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0013",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "Shell command built from variables (Python)",
+      "description": "The shell command is built from variables. If one comes from a user, they can run their own commands.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-78"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\bos\\.(?:system|popen)\\s*\\(\\s*(?:f[\"']|[^)\\n]*\\+|[^)\\n]*%|[^)\\n]*\\.format\\()",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/78.html",
+      "enforcement": {
+        "level": "block",
+        "message": "The shell command is built from variables. If one comes from a user, they can run their own commands.",
+        "required_actions": [
+          "Use subprocess.run() with an argument list",
+          "Validate inputs against an allowlist"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0014",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "critical",
+      "title": "SQL query built from strings (Python)",
+      "description": "The database query is built from strings. Attackers can change the query and read or delete your data.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-89"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\.execute\\s*\\(\\s*(?:f[\"']|[\"'][^\"'\\n]*[\"']\\s*(?:%|\\+)|[^)\\n]*\\.format\\()",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/89.html",
+      "enforcement": {
+        "level": "block",
+        "message": "The database query is built from strings. Attackers can change the query and read or delete your data.",
+        "required_actions": [
+          "Pass values as parameters: cursor.execute(sql, (value,))",
+          "Use your ORM's query builder"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0015",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "Unsafe deserialization (pickle)",
+      "description": "Loading pickle data can run code hidden inside it. Never unpickle data you didn't create yourself.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-502"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\b(?:pickle|cPickle|dill)\\.loads?\\s*\\(",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/502.html",
+      "enforcement": {
+        "level": "block",
+        "message": "Loading pickle data can run code hidden inside it. Never unpickle data you didn't create yourself.",
+        "required_actions": [
+          "Use JSON for data from users or the network",
+          "Sign and verify data if pickle is unavoidable"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0016",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "Unsafe YAML loading",
+      "description": "yaml.load without SafeLoader can create arbitrary Python objects and run code.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-502"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\byaml\\.unsafe_load\\s*\\(|\\byaml\\.load\\s*\\((?![^)]*SafeLoader)",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/502.html",
+      "enforcement": {
+        "level": "block",
+        "message": "yaml.load without SafeLoader can create arbitrary Python objects and run code.",
+        "required_actions": [
+          "Use yaml.safe_load()"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0017",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "medium",
+      "title": "TLS certificate checks turned off (Python)",
+      "description": "Certificate checks are disabled, so anyone on the network can intercept this connection.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-295"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\bverify\\s*=\\s*False",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/295.html",
+      "enforcement": {
+        "level": "block",
+        "message": "Certificate checks are disabled, so anyone on the network can intercept this connection.",
+        "required_actions": [
+          "Remove verify=False",
+          "Point verify at the correct CA bundle instead"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0018",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "low",
+      "title": "Weak hash algorithm (Python)",
+      "description": "MD5 and SHA-1 are broken for security use such as passwords or signatures.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-328"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\bhashlib\\.(?:md5|sha1)\\s*\\(",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/328.html",
+      "enforcement": {
+        "level": "warn",
+        "message": "MD5 and SHA-1 are broken for security use such as passwords or signatures.",
+        "required_actions": [
+          "Use hashlib.sha256() for integrity",
+          "Use bcrypt, scrypt or Argon2 for passwords"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0019",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "medium",
+      "title": "Debug mode enabled in a web app (Python)",
+      "description": "Debug mode shows internal details and, in Flask, gives an interactive console that can run code.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-489"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\.run\\s*\\([^)]*debug\\s*=\\s*True",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/489.html",
+      "enforcement": {
+        "level": "block",
+        "message": "Debug mode shows internal details and, in Flask, gives an interactive console that can run code.",
+        "required_actions": [
+          "Turn debug off outside local development",
+          "Read the setting from an environment variable"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0020",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "high",
+      "title": "JWT signature not verified (Python)",
+      "description": "The token's signature isn't checked, so anyone can forge a token and log in as anyone.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-347"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "verify_signature[\"']?\\s*:\\s*False",
+        "language": "python"
+      },
+      "applies_to": {
+        "languages": [
+          "python"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/347.html",
+      "enforcement": {
+        "level": "block",
+        "message": "The token's signature isn't checked, so anyone can forge a token and log in as anyone.",
+        "required_actions": [
+          "Always verify the signature and pin the allowed algorithms"
+        ]
+      }
+    },
+    {
+      "rule_id": "SHAMMAH-0021",
+      "rule_type": "cwe",
+      "source": "shammah-starter",
+      "severity": "critical",
+      "title": "SQL query built from strings (Java)",
+      "description": "The database query is built by joining strings. Attackers can change the query and read or delete your data.",
+      "cve_refs": [],
+      "cwe_refs": [
+        "CWE-89"
+      ],
+      "pattern": {
+        "type": "regex",
+        "value": "\\.execute(?:Query|Update)?\\s*\\(\\s*\"[^\"\\n]*\"\\s*\\+",
+        "language": "java"
+      },
+      "applies_to": {
+        "languages": [
+          "java"
+        ]
+      },
+      "source_link": "https://cwe.mitre.org/data/definitions/89.html",
+      "enforcement": {
+        "level": "block",
+        "message": "The database query is built by joining strings. Attackers can change the query and read or delete your data.",
+        "required_actions": [
+          "Use PreparedStatement with ? placeholders"
+        ]
+      }
+    }
+  ]
+}

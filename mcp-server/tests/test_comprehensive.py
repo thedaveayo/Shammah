@@ -196,41 +196,15 @@ class TestInfrastructureDetector:
 
 class TestRuleSync:
     """Test Rule Sync functionality"""
-    
-    def test_init(self):
-        """Test RuleSync initialization"""
+
+    def test_init_uses_backend_url(self):
+        """RuleSync keeps the session and strips trailing slashes from the URL"""
         mock_db = Mock()
-        
-        sync = RuleSync(mock_db)
-        
+
+        sync = RuleSync(mock_db, backend_url="http://example.test/")
+
         assert sync.db == mock_db
-        assert sync.rule_checksums == {}
-    
-    def test_get_local_rule_checksums(self):
-        """Test calculating local rule checksums"""
-        mock_db = Mock()
-        
-        # Create a mock rule
-        mock_rule = Mock()
-        mock_rule.rule_id = "DSV-TEST-001"
-        mock_rule.rule_type = "cwe"
-        mock_rule.source = "mitre"
-        mock_rule.severity = "high"
-        mock_rule.title = "Test Rule"
-        mock_rule.description = "Test Description"
-        mock_rule.cve_refs = []
-        mock_rule.cwe_refs = ["CWE-79"]
-        mock_rule.pattern = {"type": "regex", "value": "test"}
-        mock_rule.applies_to = {"languages": ["javascript"]}
-        mock_rule.enforcement = {"level": "block", "message": "Fix it"}
-        
-        mock_db.query().all.return_value = [mock_rule]
-        
-        sync = RuleSync(mock_db)
-        checksums = sync._get_local_rule_checksums()
-        
-        assert "DSV-TEST-001" in checksums
-        assert len(checksums["DSV-TEST-001"]) == 64  # SHA256 hash length
+        assert sync.backend_url == "http://example.test"
 
 
 class TestLocalModels:

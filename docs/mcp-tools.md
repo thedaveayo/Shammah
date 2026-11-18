@@ -1,190 +1,155 @@
-# MCP Tools Documentation
+# MCP Tools
 
-The MCP server exposes these tools to IDE coding agents:
+The Shammah MCP server (`mcp-server/main.py`) gives coding agents these tools. Every tool returns readable text. The local bridge for IDE extensions returns the same text in `result` plus the structured data shown below.
 
----
+## Connecting an agent
 
-## 1. `enforce_security`
+Use the absolute path to `mcp-server/main.py`. The server talks MCP over stdio.
 
-Validates code against security rules. Returns violations that must be fixed before proceeding.
+**Claude Code**
+```bash
+claude mcp add shammah -- python /path/to/Shammah/mcp-server/main.py
+```
 
-**Parameters:**
+**Cursor** – `.cursor/mcp.json`
 ```json
 {
-  "code": "const API_KEY = 'sk_live_abc123'",
-  "language": "javascript"  // optional
+  "mcpServers": {
+    "shammah": {
+      "command": "python",
+      "args": ["/path/to/Shammah/mcp-server/main.py"]
+    }
+  }
 }
 ```
 
-**Response (violation found):**
+**VS Code** – `.vscode/mcp.json`
+```json
+{
+  "servers": {
+    "shammah": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["/path/to/Shammah/mcp-server/main.py"]
+    }
+  }
+}
+```
+
+If you use a virtual environment, point `command` at that environment's Python.
+
+To make the agent use Shammah automatically, add to your project instructions:
+
+> Before writing code, call the `enforce_security` tool with the code and its language. If it says BLOCKED, fix the issues and check again.
+
+---
+
+## `enforce_security`
+
+Check code before using it. This is the main tool.
+
+| Argument | Required | Description |
+|---|---|---|
+| `code` | yes | The code to check |
+| `language` | no | e.g. `python`, `javascript`, `typescript`, `java`. Without it, rules for every language are used. |
+
+**Text result**
+```
+BLOCKED: 1 issue(s) must be fixed before this code is used.
+
+1. [CRITICAL] SQL query built from strings (Python) (SHAMMAH-0014) at line 3
+   Why: The database query is built from strings. Attackers can change the query and read or delete your data.
+   Fix: Pass values as parameters: cursor.execute(sql, (value,)); Use your ORM's query builder
+   Refs: CWE-89
+   Code: .execute(f"
+```
+
+The first word is always `BLOCKED` (critical, high or medium issues), `PASS WITH WARNINGS` (low only) or `PASS`.
+
+**Structured data (bridge)**
 ```json
 {
   "blocked": true,
   "compliant": false,
-  "violations": [
-    {
-      "rule_id": "DSV-2026-0001",
-      "rule_type": "dsv",
-      "severity": "high",
-      "message": "Your code has a password written directly in it. Anyone who sees your code can steal this password.",
-      "required_actions": ["Move API key to backend", "Use environment variables"],
-      "example_fix": "const API_KEY = process.env.API_KEY",
-      "matched_code": "const API_KEY = 'sk_live_abc123'"
-    }
-  ],
   "violation_count": 1,
-  "message": "❌ SECURITY ISSUE FOUND (HIGH)\n\nYour code has a password..."
+  "counts": {"critical": 1, "high": 0, "medium": 0, "low": 0},
+  "violations": [{
+    "rule_id": "SHAMMAH-0014",
+    "title": "SQL query built from strings (Python)",
+    "severity": "critical",
+    "message": "The database query is built from strings...",
+    "required_actions": ["Pass values as parameters: cursor.execute(sql, (value,))"],
+    "references": ["CWE-89"],
+    "matched_code": ".execute(f\"",
+    "line": 3, "column": 11, "end_line": 3, "end_column": 22
+  }]
 }
 ```
 
-**Response (no violations):**
-```json
-{
-  "blocked": false,
-  "compliant": true
-}
-```
+## `security_scan_file`
 
-Critical, high and medium findings block. Low findings are returned as warnings with `"blocked": false`.
+Scan a file on disk. Arguments: `file_path` (absolute path), `include_details` (default `true`). The language is taken from the file extension.
+
+## `security_scan_project`
+
+Scan every source and config file in a folder (skips `.git`, `node_modules`, virtual environments and build output). Arguments: `project_path`, `max_files` (default 2000). Returns counts by severity and the most severe issues with `file:line`.
+
+## `security_fix_suggestions`
+
+Fix steps for each issue in some code. Arguments: `code`, `language`, `vulnerability_type` (optional filter such as `sql` or `CWE-79`).
+
+## `security_context_explain`
+
+Explain the security impact of code. Arguments: `code`, `language`, `audience` (`developer`, `manager` or `security-expert`).
+
+## `security_rule_details`
+
+What a rule checks and how to fix it. Arguments: `rule_id`, `include_examples` (also show the pattern).
+
+## `get_compliance_status`
+
+Rules loaded (by source), last backend sync and the project's detected stack. Argument: `project_path`.
+
+## `get_infrastructure_profile`
+
+Languages, frameworks and infrastructure detected in a project. Argument: `project_path`.
+
+## `sync_rules`
+
+Download new rules from the backend in `BACKEND_URL`. Argument: `full` (download everything again). If the backend can't be reached, the server keeps the rules it has.
 
 ---
 
-## 2. `get_compliance_status`
+## Enforcement levels
 
-Get current security compliance status of the project.
+| Severity | Result |
+|----------|--------|
+| **Critical / High / Medium** | `BLOCKED` until fixed |
+| **Low** | `PASS WITH WARNINGS` |
 
-**Parameters:**
-```json
-{
-  "project_path": "/path/to/project"  // optional, defaults to "."
-}
+## Command line
+
+```bash
+python main.py                 # MCP server over stdio (what agents run)
+python main.py --check FILE    # scan one file; exit code 1 if anything blocks
+python main.py --sync          # sync rules from the backend once
+python main.py --bridge        # local HTTP bridge for IDE extensions
 ```
 
-**Response:**
-```
-Rules loaded: 650
-Last sync: 2026-04-29T12:00:00
-Detected stack: {
-  "languages": ["python@3.11", "javascript@18"],
-  "frameworks": ["flask@2.3", "react@18.2"],
-  "infrastructure": ["docker", "aws:lambda"],
-  "confidence": 0.95
-}
+`--check` makes a simple pre-commit or CI check:
+
+```bash
+python /path/to/Shammah/mcp-server/main.py --check src/app.py
 ```
 
----
+## Local bridge (for IDE extensions)
 
-## 3. `acknowledge_fix`
+`python main.py --bridge` serves the same tools on `http://127.0.0.1:8765`:
 
-Acknowledge that a security violation has been fixed.
-
-**Parameters:**
-```json
-{
-  "violation_id": "DSV-2026-0001",
-  "fix_description": "Moved API key to .env file and loaded via process.env"
-}
+```bash
+curl -X POST http://127.0.0.1:8765/api/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name": "enforce_security", "arguments": {"code": "eval(x)", "language": "javascript"}}'
 ```
 
-**Response:**
-```
-✓ Fix acknowledged for DSV-2026-0001
-Fix: Moved API key to .env file and loaded via process.env
-```
-
----
-
-## 4. `get_infrastructure_profile`
-
-Detect project infrastructure (languages, frameworks, etc.).
-
-**Parameters:**
-```json
-{
-  "project_path": "/path/to/project"
-}
-```
-
-**Response:**
-```json
-{
-  "languages": ["javascript", "typescript"],
-  "frameworks": ["react", "express"],
-  "infrastructure": ["docker"],
-  "confidence": 0.85
-}
-```
-
----
-
-## 5. `sync_rules`
-
-Sync latest security rules from the backend set in `BACKEND_URL`.
-
-**Parameters:** None (auto-detects stack)
-
-**Response:**
-```json
-{
-  "status": "success",
-  "rules_synced": 15,
-  "synced_at": "2026-04-29T12:00:00Z"
-}
-```
-
----
-
-## Usage Examples
-
-### Cursor IDE Integration
-
-Add to `.cursor/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "security-mcp": {
-      "command": "python",
-      "args": ["/path/to/security-mcp/mcp-server/main.py"],
-      "cwd": "/path/to/security-mcp/mcp-server"
-    }
-  }
-}
-```
-
-### VS Code Integration
-
-Add to `settings.json`:
-```json
-{
-  "mcp.servers": {
-    "security-mcp": {
-      "type": "stdio",
-      "command": "python",
-      "args": ["/path/to/mcp-server/main.py"]
-    }
-  }
-}
-```
-
----
-
-## Enforcement Levels
-
-| Severity | `enforce_security` Behavior |
-|----------|----------------------------|
-| **Critical / High / Medium** | Blocked until fixed |
-| **Low** | Warning only, can proceed |
-
----
-
-## Error Handling
-
-All tools return errors in this format:
-```json
-{
-  "error": "Error message describing what went wrong"
-}
-```
-
-Common errors:
-- `Sync failed` - Backend unreachable
+`GET /health` returns the number of rules loaded. The bridge only accepts requests made to `localhost` and refuses requests from web pages (any request with an `Origin` header).
