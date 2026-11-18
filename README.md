@@ -1,118 +1,116 @@
 # Shammah
 
-**A security gate for AI coding agents.** Shammah is an MCP (Model Context Protocol) server that checks the code your coding agent writes against security rules built from public CVE and CWE data, and blocks unsafe code before it lands in your project.
+**Security rules your AI coding agent can follow.** Shammah checks the code your agent writes (and the packages it installs) for security problems, and explains each one in words simple enough for any agent to fix without back-and-forth.
 
-> **Status: early stage.** The core pieces work, but expect rough edges. See [Known issues](#known-issues).
+It works with Claude Code, Codex, Cursor, VS Code and any agent that supports MCP (Model Context Protocol), and in GitHub Actions on every push.
 
-## How it works
+> **Status: early stage.** Core features work and are tested; expect rough edges. See [Known issues](#known-issues).
+
+## What's included
+
+| Piece | What it does | Cost |
+|---|---|---|
+| [Skill](skills/) | A 40-rule security checklist any agent can follow | Free |
+| [MCP server](mcp-server/) | Agents call it to check code and dependencies while they work; 21 tested starter rules | Free, open source |
+| `shammah init` | Connects the MCP server to your agents, writes their instructions and installs a check-every-edit hook | Free |
+| [GitHub Action](action.yml) | Scans on every push, pull request or schedule; results in the job summary and GitHub code scanning | Free |
+| Shammah Pro | The full, always-updated rule feed, plus a dashboard with scan history | Paid |
 
 ```
-CVE feed (NVD) ─┐                                   ┌──► coding agent (MCP, stdio)
-CWE catalog ────┼─► Backend ──/api/sync──► MCP server
-Curated tips ───┘   (optional)             (local)  └──► IDE extensions (local HTTP bridge)
-                                              ▲
-                                     built-in starter rules
+CVE / CWE / OSV data ─► Shammah Pro rule feed ──rules only──► MCP server, hook, GitHub Action
+                                                                    │
+                                                    your code stays on your machine / your CI
 ```
-
-- **MCP server** (`mcp-server/`): runs on your machine and gives coding agents tools such as `enforce_security`, `security_scan_file` and `security_scan_project`. It ships with 21 hand-checked starter rules (leaked keys, SQL built from strings, XSS, shell injection, unsafe deserialization, disabled TLS checks and more), so it works without a backend.
-- **Backend** (`backend/`, optional): fetches CVE and CWE data, uses an LLM to turn advisories into more rules, and serves them to MCP servers through `/api/sync`. Run your own.
-- **IDE extensions** (`vscode-extension/`, `jetbrains-plugin/`): show findings in the editor by calling the MCP server's local bridge.
-- **Web interface** (`web-interface/`): a small local page for scanning a public GitHub repository.
-
-Critical, high and medium findings **block**; low findings only **warn**. Starter rules are `SHAMMAH-NNNN`; rules from the backend are `DSV-YYYY-NNNN` (DSV = Dave Sourced Vulnerability). Every rule links to its CWE/CVE source.
 
 ## Quick start
 
-Requires Python 3.10+.
-
-### 1. Install the MCP server
+Requires Python 3.10+ and Git.
 
 ```bash
 git clone https://github.com/thedaveayo/Shammah.git
 cd Shammah/mcp-server
 pip install -r requirements.txt
-python main.py --check path/to/some_file.py     # try it from the command line
+python main.py init /path/to/your/project
 ```
 
-### 2. Connect your coding agent
+`init` sets up Claude Code, Cursor, Codex and VS Code for that project:
 
-Use the **absolute** path to `mcp-server/main.py`.
+- registers the MCP server (`.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`; for Codex it prints the `~/.codex/config.toml` lines, or add `--codex-global`),
+- adds a short instruction block to `CLAUDE.md`, `AGENTS.md` and `.cursor/rules/shammah.mdc` telling the agent when to call Shammah,
+- installs a Claude Code hook that scans every file the agent edits and hands problems back to it.
 
-**Claude Code**
+It merges with what's already there and is safe to run again. Use `--dry-run` to preview, `--agent claude` to pick agents. Restart your agent afterwards.
+
+### Scan from the command line
+
 ```bash
-claude mcp add shammah -- python /path/to/Shammah/mcp-server/main.py
+python main.py scan /path/to/project            # code + dependencies, cached between runs
+python main.py check src/app.py                  # one file
+python main.py scan . --format sarif -o shammah.sarif --fail-on high
 ```
 
-**Cursor** (`.cursor/mcp.json`) or **VS Code** (`.vscode/mcp.json`, using `"servers"` instead of `"mcpServers"`)
+Exit code 1 means something at or above `--fail-on` (default `high`) was found.
+
+### Scan on every push (GitHub Action)
+
+Copy [`examples/shammah-workflow.yml`](examples/shammah-workflow.yml) to `.github/workflows/shammah.yml`:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: thedaveayo/Shammah@main
+  with:
+    fail-on: high
+    upload-sarif: "true"
+```
+
+It runs on push, on pull requests and daily; unchanged files are skipped thanks to a cache.
+
+## What it checks
+
+- **Code:** leaked keys and passwords, SQL and shell commands built from strings, `eval`, XSS, unsafe deserialization, disabled TLS checks, debug mode, unverified JWTs, weak hashes. Every rule ships with examples it must flag and must not flag (`python main.py test-rules`).
+- **Dependencies:** `package-lock.json`, `yarn.lock`, `requirements*.txt`, `Pipfile.lock`, `poetry.lock`, `Cargo.lock`, `Gemfile.lock` and `go.mod` are checked against [OSV.dev](https://osv.dev) (GitHub advisories, PyPA, RustSec, Go and more, with CVE IDs). Each vulnerable package gets one finding with the version that fixes everything. Only package names and versions leave your machine.
+
+Findings carry the rule's CWE/CVE references. Critical, high and medium findings block; low ones warn.
+
+## Per-project settings
+
+`.shammah/config.json` in your project:
+
 ```json
-{
-  "mcpServers": {
-    "shammah": {
-      "command": "python",
-      "args": ["/path/to/Shammah/mcp-server/main.py"]
-    }
-  }
-}
+{ "muted_rules": ["SHAMMAH-0018"], "exclude": ["tests/**", "*.min.js"], "fail_on": "high" }
 ```
 
-Then ask your agent to check its code with Shammah, or add a line like this to your project instructions (`CLAUDE.md`, `.cursorrules`, ...):
+`python main.py mute RULE_ID` adds to `muted_rules`. Agents can also call `report_false_positive`, which mutes the rule and (with Shammah Pro) reports it so the rule gets fixed.
 
-> Before writing code, call the `enforce_security` tool with the code and its language. If it says BLOCKED, fix the issues and check again.
+## Shammah Pro
 
-See [docs/mcp-tools.md](docs/mcp-tools.md) for every tool.
-
-### 3. Optional: IDE extension
+Set two environment variables and the MCP server, hook and Action use the full rule feed instead of the starter rules:
 
 ```bash
-cd mcp-server
-python main.py --bridge        # local bridge on http://127.0.0.1:8765
+SHAMMAH_API_KEY=shm_live_...
+SHAMMAH_FEED_URL=https://your-shammah-pro-host
 ```
 
-Then build and install the [VS Code extension](vscode-extension/README.md). Findings show up in the Problems panel as you type.
+With `--report` (or `report: "true"` in the Action), a scan summary is sent to your dashboard: counts, rule IDs, repository and commit. Never code.
 
-### 4. Optional: run your own backend for more rules
+## Self-hosting the rule builder
 
-```bash
-cd backend
-pip install -r requirements.txt
-cp .env.example .env        # set ADMIN_API_KEY and an LLM key
-python main.py              # http://127.0.0.1:8000, API docs at /docs
-curl -X POST http://127.0.0.1:8000/api/fetch/cwe -H "Authorization: Bearer $ADMIN_API_KEY"
-curl -X POST http://127.0.0.1:8000/api/fetch/cve -H "Authorization: Bearer $ADMIN_API_KEY"
-```
-
-The MCP server syncs from `BACKEND_URL` (default `http://localhost:8000`) when it starts, or on demand with the `sync_rules` tool or `python main.py --sync`. If no backend is reachable it keeps using the rules it has.
-
-## Configuration
-
-| Variable | Where | Purpose |
-|---|---|---|
-| `NVD_API_KEY` | backend | Optional. Higher NVD rate limits. |
-| `QWEN_API_KEY`, `QWEN_BASE_URL`, `QWEN_MODEL` | backend | Any OpenAI-compatible LLM, used to generate rules and fixes. |
-| `ADMIN_API_KEY` | backend | Protects routes that change data or call paid APIs. Empty = those routes are off. |
-| `HOST`, `PORT` | backend | Defaults to `127.0.0.1:8000`. |
-| `CORS_ORIGINS` | backend | Comma-separated browser origins allowed to call the API. |
-| `BACKEND_URL` | mcp-server | Where to sync extra rules from (optional). |
-| `AUTO_SYNC_ON_START` | mcp-server | Sync from the backend when the server starts (default `true`). |
-| `BRIDGE_PORT` | mcp-server | Port of the local bridge for IDE extensions (default `8765`). |
-
-Full details: [docs/user-guide-tutorial.md](docs/user-guide-tutorial.md) and [docs/deployment.md](docs/deployment.md).
+[`backend/`](backend/) fetches CVE and CWE data and uses an LLM to draft more rules, served to MCP servers through `/api/sync`. See [docs/deployment.md](docs/deployment.md).
 
 ## Documentation
 
+- [MCP tools and command line](docs/mcp-tools.md)
 - [User guide](docs/user-guide-tutorial.md)
 - [Backend API](docs/api.md)
-- [MCP tools](docs/mcp-tools.md)
 - [Severity guide](docs/severity-guide.md)
 - [Deployment](docs/deployment.md)
 
 ## Known issues
 
-- Matching is pattern-based (regular expressions), so expect some false positives and misses. Please report both with the "Rule request or false positive" issue template.
-- The VS Code extension and JetBrains plugin aren't published to their marketplaces yet; build them from source. The JetBrains plugin has no settings page yet (set `SHAMMAH_BRIDGE_URL` to change its address).
-- Some older tests in `backend/tests` and `mcp-server/tests` fail because their mocks no longer match the code. CI skips them by name until they're fixed.
-
-Help with any of these is welcome.
+- Code matching is pattern-based (regular expressions): expect some false positives and misses. Report both with the "Rule request or false positive" issue template.
+- `pnpm-lock.yaml` isn't parsed yet. `poetry.lock` and `Cargo.lock` need Python 3.11+.
+- The VS Code extension and JetBrains plugin aren't on their marketplaces yet; build them from source. The JetBrains plugin has no settings page (set `SHAMMAH_BRIDGE_URL`).
+- Some older tests in `backend/tests` and `mcp-server/tests` fail because their mocks no longer match the code; CI skips them by name.
 
 ## Contributing
 
@@ -122,4 +120,4 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and ou
 
 Shammah is licensed under the [GNU Affero General Public License v3.0](LICENSE). If you run a modified version as a network service, you must offer its source code to the users of that service.
 
-Rule data is derived from MITRE CWE and the NIST National Vulnerability Database. See [NOTICE](NOTICE) for attributions.
+Rule data is derived from MITRE CWE, the NIST National Vulnerability Database and OSV.dev. See [NOTICE](NOTICE) for attributions.

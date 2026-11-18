@@ -1,0 +1,5 @@
+# Minimal requirements for the command-line scanner (CI, GitHub Action).
+# The MCP server itself needs requirements.txt.
+sqlalchemy>=2.0.30,<3
+requests>=2.32.4,<3
+python-dotenv>=1.0.1
