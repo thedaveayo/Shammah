@@ -14,7 +14,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [backend, mcp-server]
+        include:
+          - { component: backend, python: "3.12" }
+          - { component: mcp-server, python: "3.10" }  # oldest supported version
+          - { component: mcp-server, python: "3.12" }
     defaults:
       run:
         working-directory: ${{ matrix.component }}
@@ -22,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

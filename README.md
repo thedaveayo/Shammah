@@ -119,7 +119,7 @@ With `--report` (or `report: "true"` in the Action), a scan summary is sent to y
 ## Known issues
 
 - Code matching is pattern-based (regular expressions): expect some false positives and misses. Report both with the "Rule request or false positive" issue template.
-- `poetry.lock`, `uv.lock` and `Cargo.lock` need Python 3.11+. Maven versions inherited from a parent POM or BOM aren't resolved.
+- Maven versions inherited from a parent POM or BOM aren't resolved.
 - The VS Code extension and JetBrains plugin aren't on their marketplaces yet; build them from source. The JetBrains plugin has no settings page (set `SHAMMAH_BRIDGE_URL`).
 - Some older tests in `backend/tests` and `mcp-server/tests` fail because their mocks no longer match the code; CI skips them by name.
 

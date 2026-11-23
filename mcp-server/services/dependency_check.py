@@ -125,8 +125,12 @@ def _from_registry(pkg: Dict, ecosystem: str) -> bool:
 def _parse_toml_packages(text: str, path: str, ecosystem: str) -> List[Package]:
     try:
         import tomllib
-    except ModuleNotFoundError:  # Python < 3.11
-        return []
+    except ModuleNotFoundError:  # Python 3.10: the same parser, from the tomli package
+        try:
+            import tomli as tomllib
+        except ModuleNotFoundError:
+            logger.warning("Skipping %s: reading it on Python 3.10 needs the tomli package (pip install tomli)", path)
+            return []
     data = tomllib.loads(text)
     return [(ecosystem, p["name"], p["version"], path, _line_of(text, f'name = "{p["name"]}"'))
             for p in data.get("package", [])

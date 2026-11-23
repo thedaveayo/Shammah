@@ -1,5 +1,4 @@
 """Lockfile readers for pnpm, uv, Composer, NuGet, Gradle and Maven, plus the notes for manifests without a lockfile"""
-import sys
 
 import pytest
 
@@ -91,7 +90,6 @@ def test_pnpm_lockfile_versions(tmp_path):
         ("npm", "@babel/core", "7.12.3"), ("npm", "lodash", "4.17.20")}
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="TOML lockfiles need Python 3.11+")
 def test_uv_lock_skips_the_project_itself(tmp_path):
     text = """version = 1
 requires-python = ">=3.11"
@@ -114,7 +112,6 @@ source = { directory = "../localpkg" }
     assert parsed(tmp_path, "uv.lock", text) == {("PyPI", "requests", "2.19.0")}
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="TOML lockfiles need Python 3.11+")
 def test_cargo_workspace_crates_are_skipped(tmp_path):
     text = """version = 3
 

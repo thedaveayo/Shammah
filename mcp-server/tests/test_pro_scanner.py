@@ -102,8 +102,7 @@ def test_parsers(tmp_path):
         ("PyPI", "django", "3.0.0"), ("RubyGems", "rails", "5.0.0"), ("Go", "golang.org/x/net", "v0.1.0"),
         ("Go", "github.com/a/b", "v1.2.3"),
     }
-    if sys.version_info >= (3, 11):
-        expected |= {("PyPI", "jinja2", "2.10"), ("crates.io", "time", "0.1.0")}
+    expected |= {("PyPI", "jinja2", "2.10"), ("crates.io", "time", "0.1.0")}
     assert expected <= got
     assert ("PyPI", "flask", "2") not in got
 
