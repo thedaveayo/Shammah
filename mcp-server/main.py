@@ -98,6 +98,8 @@ def _step_summary(result) -> str:
             lines.append(f"\n...and {len(result['violations']) - 50} more.")
     if result["dependencies"].get("error"):
         lines += ["", result["dependencies"]["error"]]
+    for note in result["dependencies"].get("notes") or []:
+        lines += ["", f"> Note: {note}"]
     return "\n".join(lines) + "\n"
 
 

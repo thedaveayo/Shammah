@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import time
+import xml.etree.ElementTree as ET
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import requests
@@ -34,7 +35,16 @@ LOCKFILES = {
     "Cargo.lock": "crates.io",
     "Gemfile.lock": "RubyGems",
     "go.mod": "Go",
+    "pnpm-lock.yaml": "npm",
+    "uv.lock": "PyPI",
+    "composer.lock": "Packagist",
+    "packages.lock.json": "NuGet",
+    "Directory.Packages.props": "NuGet",
+    "gradle.lockfile": "Maven",
+    "pom.xml": "Maven",
 }
+LOCKFILE_SUFFIXES = (".csproj", ".fsproj", ".vbproj")  # .NET project files with <PackageReference>
+PLAIN_VERSION = re.compile(r"^v?\d[\w.+-]*$")  # an exact version, not a range, wildcard or ${variable}
 
 Package = Tuple[str, str, str, str, int]  # (ecosystem, name, version, lockfile, line)
 
@@ -99,6 +109,19 @@ def _parse_pipfile_lock(text: str, path: str) -> List[Package]:
     return out
 
 
+def _from_registry(pkg: Dict, ecosystem: str) -> bool:
+    """False for the project itself and for path/git/URL packages: OSV only knows registry releases, and a
+    local package that happens to share a name with a public one would be a false alarm"""
+    source = pkg.get("source")
+    if ecosystem == "crates.io":
+        return isinstance(source, str) and source.startswith("registry+")  # workspace crates have no source
+    if isinstance(source, dict):  # uv: {registry=...} or {editable|virtual|directory|path|git|url=...}; poetry: {type=...}
+        if source.get("type") in ("directory", "file", "git", "url"):
+            return False
+        return not any(k in source for k in ("editable", "virtual", "directory", "path", "git", "url"))
+    return True
+
+
 def _parse_toml_packages(text: str, path: str, ecosystem: str) -> List[Package]:
     try:
         import tomllib
@@ -106,7 +129,8 @@ def _parse_toml_packages(text: str, path: str, ecosystem: str) -> List[Package]:
         return []
     data = tomllib.loads(text)
     return [(ecosystem, p["name"], p["version"], path, _line_of(text, f'name = "{p["name"]}"'))
-            for p in data.get("package", []) if p.get("name") and p.get("version")]
+            for p in data.get("package", [])
+            if p.get("name") and p.get("version") and _from_registry(p, ecosystem)]
 
 
 def _parse_gemfile_lock(text: str, path: str) -> List[Package]:
@@ -134,6 +158,123 @@ def _parse_go_mod(text: str, path: str) -> List[Package]:
     return out
 
 
+def _parse_pnpm_lock(text: str, path: str) -> List[Package]:
+    """pnpm-lock.yaml, lockfile versions 5 to 9, read without a YAML library. Package keys sit two spaces
+    deep under `packages:`: `/name/1.2.3_peer@1.0.0` (v5), `/name@1.2.3(peer@1.0.0)` (v6) or `name@1.2.3` (v9)"""
+    m = re.search(r"^lockfileVersion:\s*['\"]?(\d+)", text, re.M)
+    v5 = bool(m and int(m.group(1)) < 6)
+    out, section = [], None
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if line and not line[0].isspace():
+            section = line.split(":", 1)[0].strip()
+            continue
+        if section != "packages" or not line.startswith("  ") or line.startswith("   ") or not line.rstrip().endswith(":"):
+            continue
+        key = line.strip()[:-1].strip("'\"").lstrip("/").split("(", 1)[0]
+        if v5:
+            km = re.match(r"^((?:@[^/]+/)?[^/]+)/(\d[^_/]*)", key)
+        else:
+            km = re.match(r"^((?:@[^/@]+/)?[^@/]+)@(.+)$", key)
+        if km and PLAIN_VERSION.match(km.group(2)):
+            out.append(("npm", km.group(1), km.group(2), path, lineno))
+    return sorted(set(out))
+
+
+def _parse_composer_lock(text: str, path: str) -> List[Package]:
+    data, out = json.loads(text), []
+    for section in ("packages", "packages-dev"):
+        for pkg in data.get(section) or []:
+            name, version = pkg.get("name"), str(pkg.get("version") or "")
+            if name and PLAIN_VERSION.match(version):  # skips dev-main and other branch versions
+                out.append(("Packagist", name, version.lstrip("vV"), path, _line_of(text, f'"name": "{name}"')))
+    return out
+
+
+def _parse_nuget_lock(text: str, path: str) -> List[Package]:
+    """packages.lock.json: {"dependencies": {"net8.0": {"Name": {"type": "Direct", "resolved": "1.2.3"}}}}"""
+    data, out = json.loads(text), set()
+    for framework in (data.get("dependencies") or {}).values():
+        for name, info in (framework or {}).items():
+            info = info or {}
+            version = str(info.get("resolved") or "")
+            if info.get("type") != "Project" and PLAIN_VERSION.match(version):
+                out.add(("NuGet", name, version, path, _line_of(text, f'"{name}"')))
+    return sorted(out)
+
+
+def _xml_root(text: str):
+    """Parse XML and drop namespaces so tags can be found by plain name"""
+    root = ET.fromstring(text)
+    for el in root.iter():
+        if isinstance(el.tag, str) and "}" in el.tag:
+            el.tag = el.tag.split("}", 1)[1]
+    return root
+
+
+def _parse_msbuild(text: str, path: str) -> List[Package]:
+    """.csproj/.fsproj/.vbproj <PackageReference> and Directory.Packages.props <PackageVersion>, exact versions only"""
+    out = []
+    for el in _xml_root(text).iter():
+        if el.tag not in ("PackageReference", "PackageVersion"):
+            continue
+        name = el.get("Include") or el.get("Update")
+        version = (el.get("Version") or el.findtext("Version") or "").strip()
+        if name and PLAIN_VERSION.match(version):
+            out.append(("NuGet", name, version, path, _line_of(text, f'"{name}"')))
+    return out
+
+
+def _parse_gradle_lockfile(text: str, path: str) -> List[Package]:
+    """gradle.lockfile lines: group:artifact:version=configurations"""
+    out = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        parts = line.split("=", 1)[0].strip().split(":")
+        if not line.startswith("#") and len(parts) == 3 and PLAIN_VERSION.match(parts[2]):
+            out.append(("Maven", f"{parts[0]}:{parts[1]}", parts[2], path, lineno))
+    return out
+
+
+def _parse_pom(text: str, path: str) -> List[Package]:
+    """pom.xml: dependencies declared in this file, with ${properties} defined in the same file resolved.
+    Versions inherited from a parent POM or BOM, and packages pulled in by other packages, aren't visible."""
+    root = _xml_root(text)
+    props = {el.tag: (el.text or "").strip() for el in root.findall("properties/*")}
+    for key in ("version", "groupId"):
+        value = root.findtext(key) or root.findtext(f"parent/{key}")
+        if value:
+            props[f"project.{key}"] = props[f"pom.{key}"] = value.strip()
+
+    def resolve(value: str) -> str:
+        for _ in range(5):  # properties may refer to other properties
+            value = re.sub(r"\$\{([^}]+)\}", lambda m: props.get(m.group(1), m.group(0)), value)
+        return value.strip()
+
+    out = []
+    for dep in root.findall("dependencies/dependency") + root.findall("dependencyManagement/dependencies/dependency"):
+        if (dep.findtext("scope") or "").strip() == "import":
+            continue  # a BOM, not a library
+        raw_artifact = (dep.findtext("artifactId") or "").strip()
+        group, artifact = resolve(dep.findtext("groupId") or ""), resolve(raw_artifact)
+        version = resolve(dep.findtext("version") or "")
+        if group and artifact and PLAIN_VERSION.match(version):
+            out.append(("Maven", f"{group}:{artifact}", version, path,
+                        _line_of(text, f"<artifactId>{raw_artifact}</artifactId>")))
+    return out
+
+
+def lockfile_note(path: str, display: str) -> Optional[str]:
+    """What a manifest can't show, so users know which packages went unchecked"""
+    name = os.path.basename(path)
+    if name == "pom.xml":
+        return (f"{display}: Maven has no lockfile, so only dependencies declared in this pom.xml with a version set "
+                "here were checked; packages they pull in, and versions inherited from a parent POM or BOM, were not.")
+    if name.endswith(LOCKFILE_SUFFIXES) or name == "Directory.Packages.props":
+        if not os.path.exists(os.path.join(os.path.dirname(path), "packages.lock.json")):
+            return (f"{display}: only packages listed here with an exact version were checked; packages they pull in "
+                    "were not. Turn on NuGet lock files (RestorePackagesWithLockFile) for a full check.")
+    return None
+
+
 def parse_lockfile(path: str, text: str) -> List[Package]:
     name = os.path.basename(path)
     try:
@@ -153,7 +294,21 @@ def parse_lockfile(path: str, text: str) -> List[Package]:
             return _parse_go_mod(text, path)
         if re.match(r"^requirements.*\.txt$", name):
             return _parse_requirements(text, path)
-    except (ValueError, KeyError, TypeError) as e:
+        if name == "pnpm-lock.yaml":
+            return _parse_pnpm_lock(text, path)
+        if name == "uv.lock":
+            return _parse_toml_packages(text, path, "PyPI")
+        if name == "composer.lock":
+            return _parse_composer_lock(text, path)
+        if name == "packages.lock.json":
+            return _parse_nuget_lock(text, path)
+        if name == "Directory.Packages.props" or name.endswith(LOCKFILE_SUFFIXES):
+            return _parse_msbuild(text, path)
+        if name == "gradle.lockfile":
+            return _parse_gradle_lockfile(text, path)
+        if name == "pom.xml":
+            return _parse_pom(text, path)
+    except (ValueError, KeyError, TypeError, ET.ParseError) as e:
         logger.warning("Could not parse %s: %s", path, e)
     return []
 
@@ -163,7 +318,7 @@ def find_lockfiles(project_path: str) -> List[str]:
     for root, dirs, files in os.walk(project_path):
         dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
         for name in sorted(files):
-            if name in LOCKFILES or re.match(r"^requirements.*\.txt$", name):
+            if name in LOCKFILES or name.endswith(LOCKFILE_SUFFIXES) or re.match(r"^requirements.*\.txt$", name):
                 found.append(os.path.join(root, name))
     return found
 
@@ -254,10 +409,12 @@ class OSVClient:
 
 def check_dependencies(project_path: str, client: Optional[OSVClient] = None,
                        muted: Iterable[str] = ()) -> Dict:
-    """Scan every lockfile under project_path. Returns {"packages", "lockfiles", "violations", "error"}"""
+    """Scan every lockfile under project_path. Returns {"packages", "lockfiles", "violations", "error", "notes"};
+    notes say what a manifest without a lockfile couldn't show"""
     client = client or OSVClient()
     muted = set(muted)
     packages: List[Package] = []
+    notes: List[str] = []
     lockfiles = find_lockfiles(project_path)
     for path in lockfiles:
         try:
@@ -265,10 +422,13 @@ def check_dependencies(project_path: str, client: Optional[OSVClient] = None,
                 packages += parse_lockfile(path, fh.read())
         except OSError:
             continue
+        note = lockfile_note(path, os.path.relpath(path, project_path))
+        if note:
+            notes.append(note)
 
     unique = sorted({(e, n, v) for e, n, v, _, _ in packages})
     data = {"lockfiles": [os.path.relpath(p, project_path) for p in lockfiles],
-            "packages": len(unique), "violations": [], "error": None}
+            "packages": len(unique), "violations": [], "error": None, "notes": notes}
     if not unique:
         return data
 

@@ -88,7 +88,8 @@ def test_parsers(tmp_path):
         "requirements.txt": "requests==2.19.0\nflask>=2  # not pinned\nuvicorn[standard]==0.30.0 ; python_version>'3'\n",
         "Pipfile.lock": json.dumps({"default": {"django": {"version": "==3.0.0"}}, "develop": {}}),
         "poetry.lock": '[[package]]\nname = "jinja2"\nversion = "2.10"\n',
-        "Cargo.lock": '[[package]]\nname = "time"\nversion = "0.1.0"\n',
+        "Cargo.lock": ('[[package]]\nname = "time"\nversion = "0.1.0"\n'
+                       'source = "registry+https://github.com/rust-lang/crates.io-index"\n'),
         "Gemfile.lock": "GEM\n  specs:\n    rails (5.0.0)\n      actionpack (= 5.0.0)\n",
         "go.mod": "module x\n\nrequire (\n\tgolang.org/x/net v0.1.0 // indirect\n)\nrequire github.com/a/b v1.2.3\n",
     }

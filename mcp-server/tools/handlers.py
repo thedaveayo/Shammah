@@ -207,11 +207,15 @@ def security_check_dependencies(db: Session, project_path: str = ".") -> Result:
     if data["error"]:
         return data["error"], data
     if not data["lockfiles"]:
-        return "No lockfiles found (package-lock.json, yarn.lock, requirements.txt, poetry.lock, Pipfile.lock, Cargo.lock, Gemfile.lock, go.mod).", data
+        return ("No lockfiles found (package-lock.json, yarn.lock, pnpm-lock.yaml, requirements.txt, Pipfile.lock, "
+                "poetry.lock, uv.lock, Cargo.lock, Gemfile.lock, go.mod, composer.lock, packages.lock.json, .csproj, "
+                "gradle.lockfile, pom.xml)."), data
+    notes = "".join(f"\n\nNote: {n}" for n in data.get("notes") or [])
     if not data["violations"]:
-        return f"Checked {data['packages']} dependencies in {', '.join(data['lockfiles'])}: no known vulnerabilities.", data
+        return (f"Checked {data['packages']} dependencies in {', '.join(data['lockfiles'])}: "
+                f"no known vulnerabilities.{notes}"), data
     return (f"{len(data['violations'])} known vulnerabilit{'y' if len(data['violations']) == 1 else 'ies'} "
-            f"in {data['packages']} dependencies:\n\n" + _format_findings(data["violations"])), data
+            f"in {data['packages']} dependencies:\n\n" + _format_findings(data["violations"]) + notes), data
 
 
 def mute_rule(db: Session, project_path: str, rule_id: str, unmute: bool = False) -> Result:

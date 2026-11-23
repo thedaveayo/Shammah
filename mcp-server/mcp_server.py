@@ -122,8 +122,8 @@ def create_server() -> MCPServer:
 
     @server.tool()
     def security_check_dependencies(project_path: str) -> str:
-        """Check the project's lockfiles (package-lock.json, yarn.lock, requirements.txt, poetry.lock,
-        Pipfile.lock, Cargo.lock, Gemfile.lock, go.mod) for packages with known vulnerabilities, and say
+        """Check the project's lockfiles (npm, yarn, pnpm, pip, Pipenv, Poetry, uv, Cargo, Bundler, Go,
+        Composer, NuGet, Gradle and Maven) for packages with known vulnerabilities, and say
         which version to upgrade to. Only package names and versions are sent to OSV.dev.
 
         Args:

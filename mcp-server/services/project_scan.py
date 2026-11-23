@@ -118,7 +118,7 @@ def scan_project(db: Session, project_path: str, max_files: int = 5000, use_cach
         for f in file_findings:
             findings.append({**f, "file_path": rel, "kind": "code"})
 
-    deps = {"lockfiles": [], "packages": 0, "violations": [], "error": None}
+    deps = {"lockfiles": [], "packages": 0, "violations": [], "error": None, "notes": []}
     if include_dependencies:
         client = osv_client or OSVClient(cache=cache.setdefault("osv", {}))
         deps = check_dependencies(project_path, client=client, muted=muted)
@@ -138,7 +138,7 @@ def scan_project(db: Session, project_path: str, max_files: int = 5000, use_cach
         "issues_found": len(findings),
         "counts": _counts(findings),
         "violations": findings,
-        "dependencies": {k: deps[k] for k in ("lockfiles", "packages", "error")},
+        "dependencies": {k: deps.get(k) for k in ("lockfiles", "packages", "error", "notes")},
         "muted_rules": sorted(muted),
         "ruleset_version": ruleset_version(all_rules.values()) if all_rules else None,
         "duration_seconds": round(time.time() - started, 2),
@@ -161,6 +161,7 @@ def format_text(result: Dict, limit: int = 25) -> str:
     lines = [head]
     if deps.get("error"):
         lines.append(deps["error"])
+    lines += [f"Note: {n}" for n in deps.get("notes") or []]
     if result["violations"]:
         lines += ["", "Most severe issues:"]
         for f in result["violations"][:limit]:

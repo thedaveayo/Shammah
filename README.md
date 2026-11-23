@@ -68,7 +68,18 @@ It runs on push, on pull requests and daily; unchanged files are skipped thanks 
 ## What it checks
 
 - **Code:** leaked keys and passwords, SQL and shell commands built from strings, `eval`, XSS, unsafe deserialization, disabled TLS checks, debug mode, unverified JWTs, weak hashes. Every rule ships with examples it must flag and must not flag (`python main.py test-rules`).
-- **Dependencies:** `package-lock.json`, `yarn.lock`, `requirements*.txt`, `Pipfile.lock`, `poetry.lock`, `Cargo.lock`, `Gemfile.lock` and `go.mod` are checked against [OSV.dev](https://osv.dev) (GitHub advisories, PyPA, RustSec, Go and more, with CVE IDs). Each vulnerable package gets one finding with the version that fixes everything. Only package names and versions leave your machine.
+- **Dependencies:** checked against [OSV.dev](https://osv.dev) (GitHub advisories, PyPA, RustSec, Go and more, with CVE IDs). Each vulnerable package gets one finding with the version that fixes everything. Only package names and versions leave your machine. Supported files:
+
+  | Ecosystem | Files |
+  |---|---|
+  | JavaScript | `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml` |
+  | Python | `requirements*.txt` (exact `==` pins), `Pipfile.lock`, `poetry.lock`, `uv.lock` |
+  | PHP | `composer.lock` |
+  | .NET | `packages.lock.json`, `*.csproj` / `*.fsproj` / `*.vbproj`, `Directory.Packages.props` |
+  | Java | `gradle.lockfile`, `pom.xml` |
+  | Rust, Ruby, Go | `Cargo.lock`, `Gemfile.lock`, `go.mod` |
+
+  Lockfiles list every installed package. `pom.xml` and .NET project files only list direct dependencies, so the scan adds a note saying packages pulled in by those weren't checked. For a full check, turn on [Gradle dependency locking](https://docs.gradle.org/current/userguide/dependency_locking.html) or NuGet lock files (`RestorePackagesWithLockFile`).
 
 Findings carry the rule's CWE/CVE references. Critical, high and medium findings block; low ones warn.
 
@@ -108,7 +119,7 @@ With `--report` (or `report: "true"` in the Action), a scan summary is sent to y
 ## Known issues
 
 - Code matching is pattern-based (regular expressions): expect some false positives and misses. Report both with the "Rule request or false positive" issue template.
-- `pnpm-lock.yaml` isn't parsed yet. `poetry.lock` and `Cargo.lock` need Python 3.11+.
+- `poetry.lock`, `uv.lock` and `Cargo.lock` need Python 3.11+. Maven versions inherited from a parent POM or BOM aren't resolved.
 - The VS Code extension and JetBrains plugin aren't on their marketplaces yet; build them from source. The JetBrains plugin has no settings page (set `SHAMMAH_BRIDGE_URL`).
 - Some older tests in `backend/tests` and `mcp-server/tests` fail because their mocks no longer match the code; CI skips them by name.
 
