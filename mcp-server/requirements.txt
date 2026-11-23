@@ -14,3 +14,4 @@ python-dotenv>=1.0.1
 
 # Infrastructure Detection
 # (uses standard library: json, re, os, pathlib)
+tomli>=2.0; python_version < "3.11"  # reads poetry.lock, uv.lock and Cargo.lock (built in from 3.11)

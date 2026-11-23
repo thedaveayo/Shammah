@@ -28,6 +28,18 @@
           "Load the value from an environment variable or a secrets manager",
           "Rotate the secret if this code was ever shared or committed"
         ]
+      },
+      "examples": {
+        "bad": [
+          "password = \"hunter2hunter2\"",
+          "const apiKey = 'abcd1234efgh5678';",
+          "CLIENT_SECRET: \"s3cr3t-value-123\""
+        ],
+        "good": [
+          "password = os.environ[\"PASSWORD\"]",
+          "const apiKey = process.env.API_KEY;",
+          "password = \"\""
+        ]
       }
     },
     {
@@ -56,6 +68,17 @@
         "required_actions": [
           "Remove the key from the code and load it from the environment",
           "Revoke and rotate the key now"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "const k = 'AKIAABCDEFGHIJKLMNOP';",
+          "token = \"ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
+          "-----BEGIN RSA PRIVATE KEY-----"
+        ],
+        "good": [
+          "const region = 'us-east-1';",
+          "-----BEGIN PUBLIC KEY-----"
         ]
       }
     },
@@ -88,6 +111,16 @@
           "Use JSON.parse() for data",
           "Replace dynamic code with explicit logic or a lookup table"
         ]
+      },
+      "examples": {
+        "bad": [
+          "eval(userInput)",
+          "const r = eval (expr);"
+        ],
+        "good": [
+          "const r = JSON.parse(text);",
+          "evaluate(x)"
+        ]
       }
     },
     {
@@ -117,6 +150,14 @@
         "message": "new Function() turns text into code, the same risk as eval().",
         "required_actions": [
           "Replace dynamic code with explicit functions"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "const f = new Function('a', body);"
+        ],
+        "good": [
+          "function add(a, b) { return a + b; }"
         ]
       }
     },
@@ -149,6 +190,17 @@
           "Use textContent for text",
           "Sanitize HTML with a library such as DOMPurify before inserting it"
         ]
+      },
+      "examples": {
+        "bad": [
+          "el.innerHTML = name;",
+          "document.write(html)",
+          "div.insertAdjacentHTML('beforeend', s)"
+        ],
+        "good": [
+          "el.textContent = name;",
+          "if (a.innerHTML == b) {}"
+        ]
       }
     },
     {
@@ -179,6 +231,14 @@
         "required_actions": [
           "Render text normally in JSX",
           "If HTML is required, sanitize it with DOMPurify first"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "<div dangerouslySetInnerHTML={{ __html: html }} />"
+        ],
+        "good": [
+          "<div>{text}</div>"
         ]
       }
     },
@@ -211,6 +271,16 @@
           "Use execFile/spawn with an argument array instead of a command string",
           "Validate inputs against an allowlist"
         ]
+      },
+      "examples": {
+        "bad": [
+          "exec(`ls ${dir}`)",
+          "execSync('rm -rf ' + path)"
+        ],
+        "good": [
+          "execFile('ls', [dir])",
+          "exec('ls -la')"
+        ]
       }
     },
     {
@@ -241,6 +311,15 @@
         "required_actions": [
           "Use parameterized queries (placeholders such as ? or $1)",
           "Use your ORM's query builder"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "db.query(`SELECT * FROM t WHERE id = ${id}`)",
+          "conn.query('SELECT * FROM u WHERE n = ' + name)"
+        ],
+        "good": [
+          "db.query('SELECT * FROM t WHERE id = $1', [id])"
         ]
       }
     },
@@ -273,6 +352,15 @@
           "Remove the override",
           "Add the correct CA certificate instead of disabling checks"
         ]
+      },
+      "examples": {
+        "bad": [
+          "https.request({ rejectUnauthorized: false })",
+          "process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'"
+        ],
+        "good": [
+          "https.request({ ca: caCert })"
+        ]
       }
     },
     {
@@ -303,6 +391,15 @@
         "required_actions": [
           "Use SHA-256 or better for integrity",
           "Use bcrypt, scrypt or Argon2 for passwords"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "crypto.createHash('md5')",
+          "createHash(\"sha1\")"
+        ],
+        "good": [
+          "crypto.createHash('sha256')"
         ]
       }
     },
@@ -335,6 +432,16 @@
           "Use ast.literal_eval() for literals or json.loads() for data",
           "Replace dynamic code with explicit logic"
         ]
+      },
+      "examples": {
+        "bad": [
+          "eval(data)",
+          "exec(code)"
+        ],
+        "good": [
+          "result = ast.literal_eval(text)",
+          "cursor.execute(sql, params)"
+        ]
       }
     },
     {
@@ -365,6 +472,15 @@
         "required_actions": [
           "Pass the command as a list and drop shell=True",
           "Validate inputs against an allowlist"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "subprocess.call(cmd, shell=True)",
+          "subprocess.run('ls ' + d, shell = True)"
+        ],
+        "good": [
+          "subprocess.run(['ls', path])"
         ]
       }
     },
@@ -397,6 +513,16 @@
           "Use subprocess.run() with an argument list",
           "Validate inputs against an allowlist"
         ]
+      },
+      "examples": {
+        "bad": [
+          "os.system(\"rm \" + path)",
+          "os.system(f\"ping {host}\")",
+          "os.popen(\"cat %s\" % name)"
+        ],
+        "good": [
+          "os.system(\"clear\")"
+        ]
       }
     },
     {
@@ -427,6 +553,16 @@
         "required_actions": [
           "Pass values as parameters: cursor.execute(sql, (value,))",
           "Use your ORM's query builder"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "cur.execute(f\"SELECT * FROM u WHERE n = {n}\")",
+          "cur.execute(\"SELECT * FROM u WHERE n = '%s'\" % n)",
+          "cur.execute(\"SELECT * FROM u WHERE id = {}\".format(i))"
+        ],
+        "good": [
+          "cur.execute(\"SELECT * FROM u WHERE n = %s\", (n,))"
         ]
       }
     },
@@ -459,6 +595,15 @@
           "Use JSON for data from users or the network",
           "Sign and verify data if pickle is unavoidable"
         ]
+      },
+      "examples": {
+        "bad": [
+          "obj = pickle.loads(blob)",
+          "data = pickle.load(f)"
+        ],
+        "good": [
+          "data = json.loads(blob)"
+        ]
       }
     },
     {
@@ -488,6 +633,16 @@
         "message": "yaml.load without SafeLoader can create arbitrary Python objects and run code.",
         "required_actions": [
           "Use yaml.safe_load()"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "yaml.load(stream)",
+          "yaml.unsafe_load(s)"
+        ],
+        "good": [
+          "yaml.safe_load(stream)",
+          "yaml.load(stream, Loader=yaml.SafeLoader)"
         ]
       }
     },
@@ -520,6 +675,15 @@
           "Remove verify=False",
           "Point verify at the correct CA bundle instead"
         ]
+      },
+      "examples": {
+        "bad": [
+          "requests.get(url, verify=False)"
+        ],
+        "good": [
+          "requests.get(url, timeout=10)",
+          "requests.get(url, verify=True)"
+        ]
       }
     },
     {
@@ -550,6 +714,15 @@
         "required_actions": [
           "Use hashlib.sha256() for integrity",
           "Use bcrypt, scrypt or Argon2 for passwords"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "hashlib.md5(data)",
+          "hashlib.sha1(b)"
+        ],
+        "good": [
+          "hashlib.sha256(data)"
         ]
       }
     },
@@ -582,6 +755,16 @@
           "Turn debug off outside local development",
           "Read the setting from an environment variable"
         ]
+      },
+      "examples": {
+        "bad": [
+          "app.run(debug=True)",
+          "app.run(host='0.0.0.0', debug=True)"
+        ],
+        "good": [
+          "app.run(debug=False)",
+          "app.run()"
+        ]
       }
     },
     {
@@ -612,6 +795,14 @@
         "required_actions": [
           "Always verify the signature and pin the allowed algorithms"
         ]
+      },
+      "examples": {
+        "bad": [
+          "jwt.decode(token, options={\"verify_signature\": False})"
+        ],
+        "good": [
+          "jwt.decode(token, key, algorithms=[\"HS256\"])"
+        ]
       }
     },
     {
@@ -641,6 +832,14 @@
         "message": "The database query is built by joining strings. Attackers can change the query and read or delete your data.",
         "required_actions": [
           "Use PreparedStatement with ? placeholders"
+        ]
+      },
+      "examples": {
+        "bad": [
+          "stmt.executeQuery(\"SELECT * FROM u WHERE id = \" + id);"
+        ],
+        "good": [
+          "PreparedStatement ps = conn.prepareStatement(\"SELECT * FROM u WHERE id = ?\");"
         ]
       }
     }

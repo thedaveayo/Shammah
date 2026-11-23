@@ -4,22 +4,21 @@ Model Context Protocol server that lets coding agents check code against
 security rules before they write it.
 """
 import logging
-import threading
 from typing import Optional
 
 from mcp.server.mcpserver import MCPServer
 
-from config import AUTO_SYNC_ON_START
-from database import SessionLocal, init_db
-from services.rule_store import load_starter_rules
+from bootstrap import prepare_rules  # noqa: F401  (re-exported for callers and tests)
+from database import SessionLocal
 from tools import handlers
 
 logger = logging.getLogger(__name__)
 
 INSTRUCTIONS = """Shammah checks code for security problems using rules built from CVE and CWE data.
-Before writing or editing code, call enforce_security with the code and its language.
-If the result says BLOCKED, fix every listed issue and check again before using the code.
-Use security_scan_file or security_scan_project to review existing code."""
+Before finishing any task that changed code, call security_scan_file on each changed file
+(or enforce_security on new code before using it). If the result says BLOCKED, fix every
+listed issue and check again. Use security_scan_project to review a whole project, including
+its dependencies."""
 
 
 def _run(name: str, **kwargs) -> str:
@@ -29,29 +28,6 @@ def _run(name: str, **kwargs) -> str:
         return text
     finally:
         db.close()
-
-
-def prepare_rules(sync: bool = AUTO_SYNC_ON_START) -> None:
-    """Create tables, load starter rules and (optionally) sync from the backend in the background"""
-    init_db()
-    db = SessionLocal()
-    try:
-        count = load_starter_rules(db)
-        logger.info("Loaded %d starter rules", count)
-    finally:
-        db.close()
-
-    if sync:
-        def _sync():
-            db = SessionLocal()
-            try:
-                text, _ = handlers.sync_rules(db)
-                logger.info(text)
-            except Exception:  # never let a sync problem stop the server
-                logger.exception("Background rule sync failed")
-            finally:
-                db.close()
-        threading.Thread(target=_sync, name="rule-sync", daemon=True).start()
 
 
 def create_server() -> MCPServer:
@@ -79,14 +55,17 @@ def create_server() -> MCPServer:
         return _run("security_scan_file", file_path=file_path, include_details=include_details)
 
     @server.tool()
-    def security_scan_project(project_path: str, max_files: int = 2000) -> str:
-        """Scan every source and config file in a project folder and summarize the issues.
+    def security_scan_project(project_path: str, max_files: int = 5000, include_dependencies: bool = True) -> str:
+        """Scan every source and config file in a project folder, plus its dependencies, and summarize
+        the issues. Unchanged files are served from a cache in .shammah/, so repeat scans are fast.
 
         Args:
             project_path: Absolute path of the project folder.
             max_files: Stop after this many files.
+            include_dependencies: Also check lockfiles for vulnerable packages (needs internet).
         """
-        return _run("security_scan_project", project_path=project_path, max_files=max_files)
+        return _run("security_scan_project", project_path=project_path, max_files=max_files,
+                    include_dependencies=include_dependencies)
 
     @server.tool()
     def security_fix_suggestions(code: str, language: Optional[str] = None,
@@ -140,6 +119,40 @@ def create_server() -> MCPServer:
             project_path: Absolute path of the project folder.
         """
         return _run("get_infrastructure_profile", project_path=project_path)
+
+    @server.tool()
+    def security_check_dependencies(project_path: str) -> str:
+        """Check the project's lockfiles (npm, yarn, pnpm, pip, Pipenv, Poetry, uv, Cargo, Bundler, Go,
+        Composer, NuGet, Gradle and Maven) for packages with known vulnerabilities, and say
+        which version to upgrade to. Only package names and versions are sent to OSV.dev.
+
+        Args:
+            project_path: Absolute path of the project folder.
+        """
+        return _run("security_check_dependencies", project_path=project_path)
+
+    @server.tool()
+    def mute_rule(project_path: str, rule_id: str, unmute: bool = False) -> str:
+        """Turn a rule off (or back on) for one project. Only do this when the user agrees the finding is wrong.
+
+        Args:
+            project_path: Absolute path of the project folder.
+            rule_id: The rule to mute, e.g. SHAMMAH-0018.
+            unmute: Turn the rule back on instead.
+        """
+        return _run("mute_rule", project_path=project_path, rule_id=rule_id, unmute=unmute)
+
+    @server.tool()
+    def report_false_positive(rule_id: str, reason: str, project_path: Optional[str] = None) -> str:
+        """Report a finding that is wrong, so the rule can be improved. Mutes the rule for the project
+        when project_path is given. Never include code or secrets in the reason.
+
+        Args:
+            rule_id: The rule that fired wrongly.
+            reason: One sentence on why the finding is wrong.
+            project_path: Absolute path of the project, to mute the rule there.
+        """
+        return _run("report_false_positive", rule_id=rule_id, reason=reason, project_path=project_path)
 
     @server.tool()
     def sync_rules(full: bool = False) -> str:
